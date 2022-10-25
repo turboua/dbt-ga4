@@ -17,8 +17,8 @@ clean-targets:         # directories to be removed by `dbt clean`
 vars:
     project: "turbo-ukr"
     dataset: "analytics_286195171"
-    start_date: "20221001" # Defines the earliest GA4 event _TABLE_SUFFIX to load into base events model.
-    frequency: daily # daily|streaming defaults to daily. If you only use the streaming export, use this setting to only get the streaming data.
+    start_date: "20220704" # Defines the earliest GA4 event _TABLE_SUFFIX to load into base events model.
+    frequency: daily
 
 # Query parameter exclusions
 # You can remove specific query parameters from the page_location by listing them here
