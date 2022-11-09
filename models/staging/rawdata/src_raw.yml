@@ -2,8 +2,8 @@ version: 2
 
 sources:
   - name: raw_db
-    database: turbo_ukr 
-    schema: raw_data
+    database: turbo-ukr 
+    dataset: raw_data
 
     tables:
       - name: raw_deals
@@ -15,7 +15,8 @@ sources:
 
   - name: raw_ads
     database: turbo-ukr 
-    schema: raw_data
+    dataset: raw_data
+
     tables:
       - name: raw_facebook
         description: Facebook ads 
