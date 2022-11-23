@@ -3,3 +3,5 @@ version: 2
 models:
   - name: base_deals
     description: Base table with refunds
+  - name: stg_products
+    description: Products table from orders
