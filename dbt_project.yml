@@ -52,3 +52,7 @@ models:
     +materialized: view
     marts:
       +materialized: table
+  rawdata:
+    +materialized: table
+  ads_data:
+    +materialized: table

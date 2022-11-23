@@ -1,0 +1,5 @@
+version: 2
+
+models:
+  - name: base_ads
+    description: Base ads campaigns table (google ads and facebook)
