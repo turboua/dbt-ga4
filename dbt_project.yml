@@ -1,4 +1,4 @@
-name: 'turbo_db'
+name: 'ga4'
 version: '0.1.4'
 config-version: 2
 model-paths: ["models"]
@@ -52,7 +52,8 @@ models:
     +materialized: view
     marts:
       +materialized: table
-  rawdata:
-    +materialized: table
-  ads_data:
-    +materialized: table
+    staging:
+      ads_data:
+        +materialized: table
+      rawdata:
+        +materialized: table
