@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: raw_db
-    database: turbo-ukr 
+    database: "{{var('project')}}"
     schema: raw_data
 
     tables:
@@ -14,7 +14,7 @@ sources:
         description: Users
 
   - name: raw_ads
-    database: turbo-ukr 
+    database: "{{var('project')}}" 
     schema: raw_data
 
     tables:
