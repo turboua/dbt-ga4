@@ -11,25 +11,3 @@ sources:
       - name: events_intraday
         identifier: events_intraday_*
         description: Intraday events table which is optionally exported by GA4. Always contains events from the current day.
-  
-  - name: raw_db
-    database: turbo-ukr 
-    schema: raw_data
-    tables:
-      - name: raw_deals
-        description: Deals 
-      - name: raw_refunds
-        description: Refunds
-      - name: raw_users
-        description: Users
-
-  - name: raw_ads
-    database: turbo-ukr 
-    schema: raw_data
-    tables:
-      - name: raw_facebook
-        description: Facebook ads 
-      - name: raw_gads_campaigns
-        description: Google Ads campaigns
-      - name: raw_gads_keywords
-        description: Google Ads keywords

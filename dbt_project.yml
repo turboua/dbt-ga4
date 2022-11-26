@@ -16,7 +16,6 @@ clean-targets:         # directories to be removed by `dbt clean`
 # The following variables should be set in the project that loads this package. 
 vars:
     project: "turbo-ukr"
-    union_schemas: ['analytics_286195171','raw_data']
     dataset: "analytics_286195171"
     start_date: "20220704" # Defines the earliest GA4 event _TABLE_SUFFIX to load into base events model.
     frequency: daily
