@@ -6,7 +6,8 @@ select
     product.product_id,
     product.price,
     product.margin,
-    product.product_category
+    product.product_category,
+    product.quantity
 from {{ source("raw_db", "raw_deals") }}, unnest(products) as product
 
 -- this filter will only be applied on an incremental run
@@ -16,4 +17,4 @@ from {{ source("raw_db", "raw_deals") }}, unnest(products) as product
 
 {% endif %}
 
-group by 1, 2, 3, 4, 5, 6
+group by 1, 2, 3, 4, 5, 6,7
