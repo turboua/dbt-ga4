@@ -11,6 +11,18 @@ with
         from {{ ref("base_ga4__events") }}
     ),
 
+    items as (
+        select
+            user_pseudo_id,
+            event_timestamp,
+            item.item_name,
+            item.item_category,
+            item.item_brand
+        from {{ ref("base_ga4__events") }}, unnest(items) as item
+        where item_name is not null
+        group by 1, 2, 3, 4, 5
+    ),
+
     signups as (
         select event_timestamp, user_pseudo_id, count(event_timestamp) as signups
         from {{ ref("base_ga4__events") }}
@@ -84,6 +96,9 @@ with
 select
     b.event_date_dt,
     b.user_pseudo_id,
+    item_name,
+    item_category,
+    item_brand,
     b.traffic_source_source as source,
     b.traffic_source_medium as medium,
     campaign,
@@ -105,6 +120,11 @@ select
     count(distinct sa.event_timestamp) as add_shipping_info,
     count(distinct p.event_timestamp) as purchase
 from base_table b
+
+left join
+    items it
+    on b.event_timestamp = it.event_timestamp
+    and b.user_pseudo_id = it.user_pseudo_id
 left join
     signups s
     on b.event_timestamp = s.event_timestamp
@@ -145,4 +165,4 @@ left join
     view_item_list vl
     on b.event_timestamp = vl.event_timestamp
     and b.user_pseudo_id = vl.user_pseudo_id
-group by 1, 2, 3, 4, 5
+group by 1, 2, 3, 4, 5, 6, 7, 8

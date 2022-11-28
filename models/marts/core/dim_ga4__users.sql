@@ -1,8 +1,9 @@
 -- User dimensions: first geo, first device, last geo, last device, first seen, last seen
 
 with users as (
-    select 
+    select
         user_key,
+        user_pseudo_id,
         min(event_timestamp) as first_seen_timestamp,
         min(event_date_dt) as first_seen_dt,
         max(event_timestamp) as last_seen_timestamp,
@@ -12,7 +13,7 @@ with users as (
         sum(is_purchase) as num_purchases
     from {{ref('stg_ga4__events')}}
     where user_key is not null -- Remove users with privacy settings enabled
-    group by 1
+    group by 1,2
 
 ),
 include_first_last_events as (
