@@ -2,6 +2,8 @@ version: 2
 
 models:
   - name: base_deals
-    description: Base table with refunds
+    description: Base table with orders and refunds, product array excluded
   - name: stg_products
-    description: Products table from orders
+    description: Products table with transaction id's and quantity
+  - name: base_products
+    description: Ready for use table with product names and categories regarding item revenue, quantity, platform, payment method and status 

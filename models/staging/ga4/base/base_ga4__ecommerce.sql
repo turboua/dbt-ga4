@@ -83,6 +83,7 @@ with
 
 select
     b.event_date_dt,
+    b.user_pseudo_id,
     b.traffic_source_source as source,
     b.traffic_source_medium as medium,
     campaign,
@@ -144,4 +145,4 @@ left join
     view_item_list vl
     on b.event_timestamp = vl.event_timestamp
     and b.user_pseudo_id = vl.user_pseudo_id
-group by 1, 2, 3, 4
+group by 1, 2, 3, 4, 5
