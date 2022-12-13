@@ -55,3 +55,5 @@ models:
     staging:
       ads_data:
         +materialized: incremental
+      rawdata:
+        +materialized: table
