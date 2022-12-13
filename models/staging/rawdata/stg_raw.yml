@@ -7,3 +7,5 @@ models:
     description: Products table with transaction id's and quantity
   - name: base_products
     description: Ready for use table with product names and categories regarding item revenue, quantity, platform, payment method and status 
+  - name: ga4_raw__source
+    description: Joined table for ecommerce GA4 data and database
