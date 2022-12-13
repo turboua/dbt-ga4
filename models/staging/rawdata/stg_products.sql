@@ -13,7 +13,7 @@ from {{ source("raw_db", "raw_deals") }}, unnest(products) as product
 -- this filter will only be applied on an incremental run
 {% if is_incremental() %}
 
- where created_at > (select max(created_at) from {{ this }}}) 
+ where created_at > (select max(created_at) from {{ this }}) 
 
 {% endif %}
 
