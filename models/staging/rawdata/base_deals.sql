@@ -26,7 +26,7 @@ from
     unnest(delivery) as delivery
 
 -- this filter will only be applied on an incremental run
-{% if is_incremental() %} where created_at > (select max(created_at) from {{ this }}) {% endif %}
+{% if is_incremental() %} where created_at > (select max(order_date) from {{ this }}) {% endif %}
 
 group by 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19
 
@@ -55,6 +55,6 @@ select
 from {{ source("raw_db", "raw_refunds") }}, unnest(products) as product
 
 -- this filter will only be applied on an incremental run
-{% if is_incremental() %} where created_at > (select max(created_at) from {{ this }}) {% endif %}
+{% if is_incremental() %} where created_at > (select max(order_date) from {{ this }}) {% endif %}
 
 group by 1, 2, 3, 4, 5, 6, 8, 9, 10
