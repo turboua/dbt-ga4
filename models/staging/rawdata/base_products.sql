@@ -14,4 +14,3 @@ select
 from {{ ref("stg_products") }} p
 left join {{ ref("base_deals") }} d on p.transaction_id = d.transaction_id
 group by 1, 2, 3, 4, 5, 6, 7, 8, 11
-order by count(d.transaction_id) desc
