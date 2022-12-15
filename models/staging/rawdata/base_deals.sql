@@ -1,9 +1,12 @@
-{{ config(materialized='incremental') }}
+{{ config(materialized='incremental')}}
 
 select
-    created_at as order_date,
+    d.created_at as order_date,
+    u.created_at as signup_date,
     transaction_id,
-    user_id,
+    d.user_id,
+    sex as gender,
+    birth_date,
     value,
     status,
     cid as clien_id,
@@ -14,6 +17,7 @@ select
     utm_term,
     utm_campaign as campaign,
     platform,
+    reg_platform,
     payment_method,
     delivery.delivery,
     delivery.courier_id,
@@ -21,21 +25,28 @@ select
     delivery.picked_up_at,
     delivery.closed_at
 from
-    {{ source("raw_db", "raw_deals") }},
+    {{ source("raw_db", "raw_deals") }} d,
     unnest(products) as product,
     unnest(delivery) as delivery
+left join {{ source("raw_db", "raw_users") }} u on d.user_id = u.user_id
 
 -- this filter will only be applied on an incremental run
-{% if is_incremental() %} where created_at > (select max(order_date) from {{ this }}) {% endif %}
+{% if is_incremental() %}
+where created_at > (select max(order_date) from {{ this }})
+{% endif %}
 
-group by 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19
+
+group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23
 
 union all
 
 select
     created_at as order_date,
+    timestamp('1900-01-01 00:00:00 UTC') as signup_date,
     transaction_id,
     user_id,
+    '' as gender,
+    '' as birth_date,
     value,
     case when transaction_id is not null then 'Refunded' else null end as status,
     '' as client_id,
@@ -46,6 +57,7 @@ select
     '' as utm_term,
     '' as campaign,
     '' as platform,
+    '' as reg_platform,
     '' as payment_method,
     '' as delivery,
     null as courier_id,
@@ -55,6 +67,8 @@ select
 from {{ source("raw_db", "raw_refunds") }}, unnest(products) as product
 
 -- this filter will only be applied on an incremental run
-{% if is_incremental() %} where created_at > (select max(order_date) from {{ this }}) {% endif %}
+{% if is_incremental() %}
+where created_at > (select max(order_date) from {{ this }})
+{% endif %}
 
-group by 1, 2, 3, 4, 5, 6, 8, 9, 10
+group by 1, 2, 3, 4, 5, 6, 7, 8, 9

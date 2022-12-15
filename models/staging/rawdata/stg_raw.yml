@@ -9,3 +9,5 @@ models:
     description: Ready for use table with product names and categories regarding item revenue, quantity, platform, payment method and status 
   - name: ga4_raw__source
     description: Joined table for ecommerce GA4 data and database
+  - name: ga4_funnel
+    description: Ecommerce first touch funnel (signup - item view - add to cart - purchase)

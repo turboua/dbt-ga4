@@ -1,9 +1,13 @@
 select
     order_date,
+    d.signup_date,
     p.transaction_id,
     clien_id,
+    d.birth_date,
+    d.gender,
     product_name,
     product_category,
+    d.reg_platform,
     platform,
     payment_method,
     status,
@@ -13,4 +17,4 @@ select
     sum(margin) as margin
 from {{ ref("stg_products") }} p
 left join {{ ref("base_deals") }} d on p.transaction_id = d.transaction_id
-group by 1, 2, 3, 4, 5, 6, 7, 8, 11
+group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15
