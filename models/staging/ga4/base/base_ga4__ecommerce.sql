@@ -1,3 +1,5 @@
+{{ config(materialized='incremental')}}
+
 with
     base_table as (
         select
@@ -179,4 +181,9 @@ left join
     and b.user_pseudo_id = vl.user_pseudo_id
     and vl.item_name = it.item_name
     and vl.item_category = it.item_category
+
+{% if is_incremental() %}
+where event_date_dt > (select max(event_date_dt) from {{ this }})
+{% endif %}
+
 group by 1, 2, 3, 4, 5, 6, 7, 8

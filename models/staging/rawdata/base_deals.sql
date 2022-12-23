@@ -9,7 +9,7 @@ select
     birth_date,
     value,
     status,
-    cid as clien_id,
+    cid as client_id,
     sum(product.quantity) as quantity,
     utm_source as source,
     utm_medium as medium,

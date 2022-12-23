@@ -1,3 +1,5 @@
+{{ config(materialized='incremental', incremental_strategy = 'insert_overwrite')}}
+
 select
     transaction_id,
     product.product_name,

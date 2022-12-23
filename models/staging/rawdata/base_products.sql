@@ -1,8 +1,10 @@
+{{ config(materialized='incremental')}}
+
 select
     order_date,
     d.signup_date,
     p.transaction_id,
-    clien_id,
+    client_id,
     d.birth_date,
     d.gender,
     product_name,
@@ -17,4 +19,9 @@ select
     sum(margin) as margin
 from {{ ref("stg_products") }} p
 left join {{ ref("base_deals") }} d on p.transaction_id = d.transaction_id
+
+{% if is_incremental() %}
+where created_at > (select max(order_date) from {{ this }})
+{% endif %}
+
 group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15
