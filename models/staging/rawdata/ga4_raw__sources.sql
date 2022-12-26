@@ -1,4 +1,4 @@
-{{ config(materialized='incremental')}}
+{{ config(materialized="incremental") }}
 
 with
     rawdb as (select * from {{ ref("base_products") }}),
@@ -31,7 +31,7 @@ from {{ ref("base_products") }} b
 left join {{ ref("base_ga4__ecommerce") }} g on b.client_id = g.user_pseudo_id
 
 {% if is_incremental() %}
-where created_at > (select max(order_date) from {{ this }})
+where order_date > (select max(order_date) from {{ this }})
 {% endif %}
 
 group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18
