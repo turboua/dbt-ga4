@@ -68,7 +68,7 @@ from {{ source("raw_db", "raw_refunds") }} r, unnest(products) as product
 
 -- this filter will only be applied on an incremental run
 {% if is_incremental() %}
-where created_at > (select max(order_date) from {{ this }})
+where r.created_at > (select max(order_date) from {{ this }})
 {% endif %}
 
 group by 1, 2, 3, 4, 5, 6, 7, 8, 9
