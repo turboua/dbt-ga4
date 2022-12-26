@@ -1,9 +1,9 @@
-{{ config(materialized='incremental', incremental_strategy = 'insert_overwrite')}}
+{{ config(materialized="incremental") }}
 
 with
     tr as (
         select client_id, user_id, order_date, transaction_id, status, value
-        from {{ ref('base_deals') }}
+        from {{ ref("base_deals") }}
     ),
 
     ranked as (
@@ -26,9 +26,12 @@ with
             transaction_id,
             value,
             status,
-            rank = 1 as isfirstSale
+            rank = 1 as isfirstsale
         from ranked
     )
+{% if is_incremental() %}
+where order_date > (select max(order_date) from {{ this }})
+{% endif %}
 
 select *
 from final

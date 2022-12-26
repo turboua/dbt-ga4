@@ -41,7 +41,7 @@ group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 
 union all
 
 select
-    created_at as order_date,
+    r.created_at as order_date,
     timestamp('1900-01-01 00:00:00 UTC') as signup_date,
     transaction_id,
     user_id,
@@ -64,7 +64,7 @@ select
     '' as delivery_address,
     null as picked_up_at,
     null as closed_at
-from {{ source("raw_db", "raw_refunds") }}, unnest(products) as product
+from {{ source("raw_db", "raw_refunds") }} r, unnest(products) as product
 
 -- this filter will only be applied on an incremental run
 {% if is_incremental() %}
