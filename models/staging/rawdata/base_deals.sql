@@ -32,7 +32,7 @@ left join {{ source("raw_db", "raw_users") }} u on d.user_id = u.user_id
 
 -- this filter will only be applied on an incremental run
 {% if is_incremental() %}
-where created_at > (select max(order_date) from {{ this }})
+where d.created_at > (select max(order_date) from {{ this }})
 {% endif %}
 
 
