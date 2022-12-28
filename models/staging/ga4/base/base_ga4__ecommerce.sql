@@ -19,11 +19,12 @@ with
             user_pseudo_id,
             event_timestamp,
             item.item_name,
+            item.item_id,
             item.item_category,
             item.item_brand
         from {{ ref('base_ga4__events') }}, unnest(items) as item
         where item_name is not null
-        group by 1, 2, 3, 4, 5, 6
+        group by 1, 2, 3, 4, 5, 6, 7
     ),
 
     signups as (
@@ -100,6 +101,7 @@ select
     b.event_date_dt,
     b.user_pseudo_id,
     it.item_name,
+    it.item_id,
     it.item_category,
     item_brand,
     b.traffic_source_source as source,
@@ -186,4 +188,4 @@ left join
 where event_date_dt > (select max(event_date_dt) from {{ this }})
 {% endif %}
 
-group by 1, 2, 3, 4, 5, 6, 7, 8
+group by 1, 2, 3, 4, 5, 6, 7, 8, 9
