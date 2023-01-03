@@ -2,7 +2,7 @@
 
 with
     tr as (
-        select client_id, user_id, order_date, transaction_id, status, value
+        select client_id, user_id, platform, order_date, transaction_id, status, value
         from {{ ref("base_deals") }}
     ),
 
@@ -10,6 +10,7 @@ with
         select
             client_id,
             user_id,
+            platform,
             order_date,
             transaction_id,
             value,
@@ -22,6 +23,7 @@ with
         select
             client_id,
             user_id,
+            platform,
             order_date,
             transaction_id,
             value,

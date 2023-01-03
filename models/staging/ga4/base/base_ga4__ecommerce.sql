@@ -7,6 +7,7 @@ with
             event_date_dt,
             event_timestamp,
             user_pseudo_id,
+            platform,
             traffic_source_source,
             traffic_source_medium,
             traffic_source_name as campaign
@@ -104,6 +105,7 @@ select
     it.item_id,
     it.item_category,
     item_brand,
+    platform,
     b.traffic_source_source as source,
     b.traffic_source_medium as medium,
     campaign,
@@ -188,4 +190,4 @@ left join
 where event_date_dt > (select max(event_date_dt) from {{ this }})
 {% endif %}
 
-group by 1, 2, 3, 4, 5, 6, 7, 8, 9
+group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
