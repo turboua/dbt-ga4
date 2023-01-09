@@ -1,5 +1,8 @@
 select
     event_date_dt,
+    platform,
+    source,
+    medium,
     count(distinct step1_id) as sign_up,
     count(distinct step2_id) as viewitem,
     count(distinct step3_id) as addtocart,
@@ -8,6 +11,9 @@ from
     (
         select distinct
             event_date_dt,
+            platform,
+            traffic_source_source as source,
+            traffic_source_medium as medium,
             user_pseudo_id as step1_id,
             event_timestamp as step1_timestamp,
             step2_id,
@@ -59,6 +65,6 @@ from
             on step3_id = step4_id
 
         where event_name = "sign_up"
-        group by 1, 2, 3, 4, 5, 6, 7, 8, 9
+        group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
     )
-group by 1
+group by 1, 2, 3, 4

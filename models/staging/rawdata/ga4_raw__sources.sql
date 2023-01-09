@@ -12,7 +12,7 @@ select
     order_date,
     signup_date,
     birth_date,
-    transaction_id,
+    b.transaction_id,
     client_id,
     gender,
     product_name,
