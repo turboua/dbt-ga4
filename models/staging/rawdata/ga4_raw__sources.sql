@@ -25,7 +25,7 @@ select
     platform,
     payment_method,
     status,
-    item_revenue,
+    price as item_revenue,
     quantity,
     margin
 from {{ ref("base_products") }} b
