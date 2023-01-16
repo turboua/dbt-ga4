@@ -218,7 +218,9 @@ with
 
         {% if is_incremental() %}
 
-        where order_date > (select max(date) from {{ this }})
+        where
+            extract(date from base_deals.order_date)
+            > (select max(date) from {{ this }})
 
         {% endif %}
 
@@ -359,13 +361,13 @@ with
             sum(impressions) as impressions,
             sum(cost) as cost
         from {{ ref("base_ads") }}
-    
+
         {% if is_incremental() %}
 
         where date > (select max(date) from {{ this }})
 
         {% endif %}
-        
+
         group by date, campaign
     ),
 
