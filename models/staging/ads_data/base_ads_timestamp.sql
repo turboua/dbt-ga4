@@ -1,3 +1,5 @@
+{{ config(materialized="incremental") }}
+
 with
     -- Собирает базоввые колонки для отчета
     -- Распаковывае параметры для отпределения источника и канала
@@ -52,10 +54,14 @@ with
             case when event_name = 'purchase' then 1 else 0 end as transactions
         from `turbo-ukr.analytics_286195171.events_*`
         where
-            event_name = 'page_view'
-            or event_name = 'screen_view'
-            or event_name = 'session_start'
-            or event_name = 'purchase'
+            _table_suffix
+            = format_date('%Y%m%d', date_sub(current_date(), interval 2 day))
+            and (
+                event_name = 'page_view'
+                or event_name = 'screen_view'
+                or event_name = 'session_start'
+                or event_name = 'purchase'
+            )
     ),
 
     -- делает базовую таблицу для опредления источника
@@ -209,6 +215,13 @@ with
             sum(base_deals.value) as revenue
         from {{ ref("base_deals") }} as base_deals
         left join base_ga on base_ga.transaction_id = base_deals.transaction_id
+
+        {% if is_incremental() %}
+
+        where order_date > (select max(date) from {{ this }})
+
+        {% endif %}
+
         group by
             base_ga.session_id,
             base_ga.user_pseudo_id,
@@ -367,6 +380,13 @@ with
             campaign_level.cost
         from agg_ga
         left join campaign_level on agg_ga.campaign = campaign_level.campaign
+
+        {% if is_incremental() %}
+
+        where date > (select max(date) from {{ this }})
+
+        {% endif %}
+
         where
             (agg_ga.source = 'google' or agg_ga.source = 'facebook')
             and agg_ga.medium = 'cpc'
@@ -386,6 +406,13 @@ with
             sum(impressions) as impressions,
             sum(cost) as cost
         from {{ ref("base_ads") }}
+
+        {% if is_incremental() %}
+
+        where date > (select max(date) from {{ this }})
+
+        {% endif %}
+
         group by date, campaign, ad_group
     ),
 
@@ -427,6 +454,13 @@ with
             sum(impressions) as impressions,
             sum(cost) as cost
         from {{ ref("base_ads") }}
+
+        {% if is_incremental() %}
+
+        where date > (select max(date) from {{ this }})
+
+        {% endif %}
+
         group by date, campaign, ad_group, ad_id
     ),
 
@@ -490,6 +524,13 @@ with
             sum(impressions) as impressions,
             sum(cost) as cost
         from {{ ref("base_ads") }} as base_ads
+
+        {% if is_incremental() %}
+
+        where date > (select max(date) from {{ this }})
+
+        {% endif %}
+
         group by
             date, source, medium, campaign, campaign_id, ad_group, ad_group_id, ad_id
     ),
@@ -555,6 +596,12 @@ with
             or source is null
     )
 
-select date, CAST(TIMESTAMP_MICROS(CAST(date_time as int64)) as datetime) as date_time , user_pseudo_id, sum(views) as views, sum(transactions) as orders, sum(revenue) as revenue
+select
+    date,
+    cast(timestamp_micros(cast(date_time as int64)) as datetime) as date_time,
+    user_pseudo_id,
+    sum(views) as views,
+    sum(transactions) as orders,
+    sum(revenue) as revenue
 from agg_ga_users
 group by date, date_time, user_pseudo_id

@@ -1,3 +1,5 @@
+{{ config(materialized="incremental") }}
+
 with
     -- Собирает базоввые колонки для отчета
     -- Распаковывае параметры для отпределения источника и канала
@@ -51,11 +53,16 @@ with
             end as views,
             case when event_name = 'purchase' then 1 else 0 end as transactions
         from `turbo-ukr.analytics_286195171.events_*`
+
         where
-            event_name = 'page_view'
-            or event_name = 'screen_view'
-            or event_name = 'session_start'
-            or event_name = 'purchase'
+            _table_suffix
+            = format_date('%Y%m%d', date_sub(current_date(), interval 2 day))
+            and (
+                event_name = 'page_view'
+                or event_name = 'screen_view'
+                or event_name = 'session_start'
+                or event_name = 'purchase'
+            )
     ),
 
     -- делает базовую таблицу для опредления источника
@@ -209,6 +216,13 @@ with
             sum(base_deals.value) as revenue
         from {{ ref("base_deals") }} as base_deals
         left join base_ga on base_ga.transaction_id = base_deals.transaction_id
+
+        {% if is_incremental() %}
+
+        where order_date > (select max(date) from {{ this }})
+
+        {% endif %}
+
         group by
             base_ga.session_id,
             base_ga.user_pseudo_id,
@@ -346,6 +360,13 @@ with
             sum(impressions) as impressions,
             sum(cost) as cost
         from {{ ref("base_ads") }}
+
+        {% if is_incremental() %}
+
+        where date > (select max(date) from {{ this }})
+
+        {% endif %}
+
         group by date, campaign
     ),
 
@@ -389,6 +410,13 @@ with
             sum(impressions) as impressions,
             sum(cost) as cost
         from {{ ref("base_ads") }}
+
+        {% if is_incremental() %}
+
+        where date > (select max(date) from {{ this }})
+
+        {% endif %}
+
         group by date, campaign, ad_group
     ),
 
@@ -433,6 +461,13 @@ with
             sum(impressions) as impressions,
             sum(cost) as cost
         from {{ ref("base_ads") }}
+
+        {% if is_incremental() %}
+
+        where date > (select max(date) from {{ this }})
+
+        {% endif %}
+
         group by date, campaign, ad_group, ad_id
     ),
 
@@ -497,6 +532,13 @@ with
             sum(impressions) as impressions,
             sum(cost) as cost
         from {{ ref("base_ads") }} as base_ads
+
+        {% if is_incremental() %}
+
+        where date > (select max(date) from {{ this }})
+
+        {% endif %}
+
         group by
             date, source, medium, campaign, campaign_id, ad_group, ad_group_id, ad_id
     ),
