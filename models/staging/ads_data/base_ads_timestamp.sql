@@ -359,6 +359,13 @@ with
             sum(impressions) as impressions,
             sum(cost) as cost
         from {{ ref("base_ads") }}
+    
+        {% if is_incremental() %}
+
+        where date > (select max(date) from {{ this }})
+
+        {% endif %}
+        
         group by date, campaign
     ),
 
@@ -380,13 +387,6 @@ with
             campaign_level.cost
         from agg_ga
         left join campaign_level on agg_ga.campaign = campaign_level.campaign
-
-        {% if is_incremental() %}
-
-        where date > (select max(date) from {{ this }})
-
-        {% endif %}
-
         where
             (agg_ga.source = 'google' or agg_ga.source = 'facebook')
             and agg_ga.medium = 'cpc'

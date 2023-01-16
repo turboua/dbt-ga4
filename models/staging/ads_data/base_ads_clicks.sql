@@ -219,7 +219,9 @@ with
 
         {% if is_incremental() %}
 
-        where order_date > (select max(date) from {{ this }})
+        where
+            extract(date from base_deals.order_date)
+            > (select max(date) from {{ this }})
 
         {% endif %}
 
