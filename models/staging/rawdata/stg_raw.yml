@@ -13,5 +13,7 @@ models:
     description: Ecommerce first touch funnel (signup - item view - add to cart - purchase)
   - name: stg_orderscohort
     description: Cohorts table by orders
+  - name: stg_ordersperuser
+    description: Table for orders per user and aov
   - name: ga4_cohort
     description: Cohorts table by user visits
