@@ -5,6 +5,7 @@ select
     d.signup_date,
     p.transaction_id,
     client_id,
+    user_id,
     d.birth_date,
     d.gender,
     product_name,
@@ -25,4 +26,4 @@ left join {{ ref("base_deals") }} d on p.transaction_id = d.transaction_id
 where order_date > (select max(order_date) from {{ this }})
 {% endif %}
 
-group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16
+group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17
