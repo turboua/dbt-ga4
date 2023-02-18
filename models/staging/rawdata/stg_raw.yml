@@ -17,3 +17,5 @@ models:
     description: Table for orders per user and aov
   - name: ga4_cohort
     description: Cohorts table by user visits
+  - name: stg_ltv
+    description: LTV calculations table
