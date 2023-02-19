@@ -2,7 +2,16 @@
 
 with
     tr as (
-        select client_id, user_id, platform, order_date, transaction_id, status, value
+        select
+            client_id,
+            user_id,
+            platform,
+            order_date,
+            transaction_id,
+            status,
+            value,
+            margin,
+            quantity
         from {{ ref("base_deals") }}
     ),
 
@@ -14,7 +23,9 @@ with
             order_date,
             transaction_id,
             value,
+            margin,
             status,
+            quantity,
             rank() over (partition by client_id order by order_date) as rank
         from tr
     ),
@@ -27,7 +38,9 @@ with
             order_date,
             transaction_id,
             value,
+            margin,
             status,
+            quantity,
             rank = 1 as isfirstsale
         from ranked
     )

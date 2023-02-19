@@ -1,4 +1,4 @@
-{{ config(materialized='incremental')}}
+{{ config(materialized="incremental") }}
 
 select
     d.created_at as order_date,
@@ -8,6 +8,7 @@ select
     sex as gender,
     birth_date,
     value,
+    round(sum(margin), 2) as margin,
     status,
     cid as client_id,
     sum(product.quantity) as quantity,
@@ -36,7 +37,7 @@ where d.created_at > (select max(order_date) from {{ this }})
 {% endif %}
 
 
-group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23
+group by 1, 2, 3, 4, 5, 6, 7, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
 
 union all
 
@@ -48,6 +49,7 @@ select
     '' as gender,
     '' as birth_date,
     value,
+    0 as margin,
     case when transaction_id is not null then 'Refunded' else null end as status,
     '' as client_id,
     sum(product.quantity) as quantity,
