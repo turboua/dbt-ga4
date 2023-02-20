@@ -8,7 +8,7 @@ select
     sex as gender,
     birth_date,
     value,
-    round(sum(margin), 2) as margin,
+    round(sum(product.margin), 2) as margin,
     status,
     cid as client_id,
     sum(product.quantity) as quantity,
