@@ -18,7 +18,7 @@ select
     count(distinct d.transaction_id) as orders,
     price,
     p.quantity,
-    sum(margin) as margin
+    sum(d.margin) as margin
 from {{ ref("stg_products") }} p
 left join {{ ref("base_deals") }} d on p.transaction_id = d.transaction_id
 
