@@ -29,13 +29,14 @@ from
     {{ source("raw_db", "raw_deals") }} d,
     unnest(products) as product,
     unnest(delivery) as delivery
+
 left join {{ source("raw_db", "raw_users") }} u on d.user_id = u.user_id
 
 -- this filter will only be applied on an incremental run
 {% if is_incremental() %}
-where d.created_at > (select max(order_date) from {{ this }})
+where extract(date from d.created_at) in ({{ var("today_and_last_week") | join(",") }})
+    and d.created_at not in (select order_date from {{ this }})
 {% endif %}
-
 
 group by 1, 2, 3, 4, 5, 6, 7, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
 
@@ -70,7 +71,8 @@ from {{ source("raw_db", "raw_refunds") }} r, unnest(products) as product
 
 -- this filter will only be applied on an incremental run
 {% if is_incremental() %}
-where r.created_at > (select max(order_date) from {{ this }})
+where extract(date from r.created_at) in ({{ var("today_and_last_week") | join(",") }})
+    and r.created_at not in (select order_date from {{ this }})
 {% endif %}
 
 group by 1, 2, 3, 4, 5, 6, 7, 8, 9
