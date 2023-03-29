@@ -24,7 +24,9 @@ select
     delivery.courier_id,
     delivery.delivery_address,
     delivery.picked_up_at,
-    delivery.closed_at
+    delivery.closed_at,
+    delivery.warehouse,
+    warehouse_id
 from
     {{ source("raw_db", "raw_deals") }} d,
     unnest(products) as product,
@@ -38,7 +40,7 @@ where extract(date from d.created_at) in ({{ var("today_and_last_week") | join("
     and d.created_at not in (select order_date from {{ this }})
 {% endif %}
 
-group by 1, 2, 3, 4, 5, 6, 7, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
+group by 1, 2, 3, 4, 5, 6, 7, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26
 
 union all
 
@@ -62,12 +64,14 @@ select
     '' as platform,
     '' as reg_platform,
     '' as payment_method,
-    '' as delivery,
-    null as courier_id,
-    '' as delivery_address,
-    null as picked_up_at,
-    null as closed_at
-from {{ source("raw_db", "raw_refunds") }} r, unnest(products) as product
+    delivery.delivery as delivery,
+    '' as courier_id,
+    delivery.delivery_address as delivery_address,
+    delivery.picked_up_at as picked_up_at,
+    delivery.closed_at as closed_at,
+    delivery.warehouse as warehouse,
+    delivery.warehouse_id as warehouse_id
+from {{ source("raw_db", "raw_refunds") }} r, unnest(products) as product, unnest(delivery) as delivery
 
 -- this filter will only be applied on an incremental run
 {% if is_incremental() %}
@@ -75,4 +79,4 @@ where extract(date from r.created_at) in ({{ var("today_and_last_week") | join("
     and r.created_at not in (select order_date from {{ this }})
 {% endif %}
 
-group by 1, 2, 3, 4, 5, 6, 7, 8, 9
+group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 19,20,21,22,23,24,25,26

@@ -1,6 +1,6 @@
 select
     user_id,
-    sum(item_revenue) / count(distinct transaction_id) as aov,
+    sum(margin) / count(distinct transaction_id) as aov,
     count(distinct transaction_id)
     / count(distinct format_date('%Y-%m', order_date)) as purchase_frequency,
     round(
@@ -8,7 +8,7 @@ select
         3
     ) as customer_lifetime,
     (
-        sum(item_revenue)
+        sum(margin)
         / (count(distinct transaction_id))
         * case
             when
@@ -19,21 +19,28 @@ select
                 (
                     count(distinct transaction_id)
                     / count(distinct format_date('%Y-%m', order_date))
-                ) * round(
-                    (
-                        (
+                ) * (case
+                        when
+                        round(
                             date_diff(
                                 max(cast(order_date as date)),
                                 min(cast(order_date as date)),
                                 month
-                            )
-                        )
+                            )) = 0
+                                then 1
+                                else
+                                    round(
+
+                            date_diff(
+                                max(cast(order_date as date)),
+                                min(cast(order_date as date)),
+                                month
+                            ))
+                            end)
+                        
                         / count(distinct user_id)
-                    ),
-                    0
-                )
+                
             else 1
-        end
-    ) as ltv
+        end) as ltv
 from {{ ref("ga4_raw__sources") }}
 group by 1
