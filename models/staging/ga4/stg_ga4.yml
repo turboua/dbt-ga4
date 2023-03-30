@@ -59,3 +59,5 @@ models:
           - not_null
   - name: ga4__cohort
     description: Cohorts with visits
+  - name: ga4__usertype
+    description: New or returned users
