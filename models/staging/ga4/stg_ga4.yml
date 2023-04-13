@@ -61,3 +61,5 @@ models:
     description: Cohorts with visits
   - name: ga4__usertype
     description: New or returned users
+  - name: base_ga4__ads
+    description: Base table for ads
