@@ -4,9 +4,8 @@ select
     source,
     medium,
     count(distinct step1_id) as sign_up,
-    count(distinct step2_id) as viewitem,
-    count(distinct step3_id) as addtocart,
-    count(distinct step4_id) as purchase
+    count(distinct step2_id) as addtocart,
+    count(distinct step3_id) as purchase
 from
     (
         select distinct
@@ -19,31 +18,17 @@ from
             step2_id,
             step2_timestamp,
             step3_id,
-            step3_timestamp,
-            step4_id,
-            step4_timestamp
+            step3_timestamp
         from {{ ref("base_ga4__events") }}
 
         left join
             (
-                select distinct
-                    user_pseudo_id as step2_id, event_timestamp as step2_timestamp
-                from {{ ref("base_ga4__events") }}
-                where (event_name = "view_item")
-                group by 1, 2
-            )
-            on user_pseudo_id = step2_id
-            and event_timestamp < step2_timestamp
-
-
-        left join
-            (
-                select user_pseudo_id as step3_id, step3_timestamp
+                select user_pseudo_id as step2_id, step2_timestamp
                 from
                     (
                         select
                             user_pseudo_id,
-                            event_timestamp as step3_timestamp,
+                            event_timestamp as step2_timestamp,
                             row_number() over (
                                 partition by user_pseudo_id order by event_timestamp asc
                             ) as row_num
@@ -52,19 +37,21 @@ from
                     )
                 where row_num = 1
             )
-            on step3_id = step2_id
-            and step2_timestamp < step3_timestamp
+            on user_pseudo_id = step2_id
+            and event_timestamp < step2_timestamp
 
         left join
             (
                 select distinct
-                    user_pseudo_id as step4_id, event_timestamp as step4_timestamp,
+                    user_pseudo_id as step3_id, event_timestamp as step3_timestamp,
                 from {{ ref("base_ga4__events") }}
                 where event_name = "purchase"
             )
-            on step3_id = step4_id
+            on step3_id = step2_id
+            and step2_timestamp < step3_timestamp
 
         where event_name = "sign_up"
-        group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+        group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
     )
 group by 1, 2, 3, 4
+order by 1 desc
