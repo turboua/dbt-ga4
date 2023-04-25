@@ -11,11 +11,15 @@ models:
     description: Joined table for ecommerce GA4 data and database
   - name: ga4_funnel
     description: Ecommerce first touch funnel (signup - item view - add to cart - purchase)
-  - name: stg_orderscohort
+  - name: raw_orderscohort
     description: Cohorts table by orders
-  - name: stg_ordersperuser
+  - name: raw_ordersperuser
     description: Table for orders per user and aov
   - name: ga4_cohort
     description: Cohorts table by user visits
   - name: stg_ltv
     description: LTV calculations table
+  - name: raw_revcohort
+    description: Cohorts week table by revenue
+  - name: ga4_visitscohort
+    description: Cohorts week table by visits

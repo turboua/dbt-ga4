@@ -18,10 +18,10 @@ WITH
     ad_group_id,
     ad_id,
     SUM(views) AS views,
-    SUM(transactions) AS transactions,
-    SUM(revenue) AS revenue
+    SUM(last_non_direct_transactions) AS transactions,
+    SUM(last_non_direct_revenue) AS revenue
   FROM
-    {{ ref("base_ga4__ads") }}
+    {{ ref("stg_lastnondirect") }}
   GROUP BY
     date,
     source,
@@ -74,9 +74,7 @@ WITH
     AND base_ga_table.medium = 'cpc'
     AND base_ga_table.ad_group IS NULL
     AND base_ga_table.ad_id IS NULL
-    AND (base_ga_table.campaign IS NOT NULL
-      AND base_ga_table.campaign != '(cpc)'
-      AND base_ga_table.campaign != '(direct)') ),
+    AND base_ga_table.campaign IS NOT NULL),
 
  ---aggregates data from the ads table on the ad_group level 
   ad_group_level AS (
@@ -123,9 +121,7 @@ WITH
     AND base_ga_table.medium = 'cpc'
     AND base_ga_table.ad_group IS NOT NULL
     AND base_ga_table.ad_id IS NULL
-    AND (base_ga_table.campaign IS NOT NULL
-      AND base_ga_table.campaign != '(cpc)'
-      AND base_ga_table.campaign != '(direct)') ),
+     AND base_ga_table.campaign IS NOT NULL),
 
 ---aggregates data from the ads table on the ad level 
   ad_level AS (
@@ -175,9 +171,7 @@ WITH
     AND base_ga_table.medium = 'cpc'
     AND base_ga_table.ad_group IS NOT NULL
     AND base_ga_table.ad_id IS NOT NULL
-    AND (base_ga_table.campaign IS NOT NULL
-      AND base_ga_table.campaign != '(cpc)'
-      AND base_ga_table.campaign != '(direct)') ),
+     AND base_ga_table.campaign IS NOT NULL),
 
 ---unions all three tables
   ga_ads AS (
@@ -324,4 +318,4 @@ SELECT
   impressions,
   cost
 FROM
-  all_ads
+  all_ads 

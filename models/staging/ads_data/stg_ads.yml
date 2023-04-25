@@ -3,3 +3,9 @@ version: 2
 models:
   - name: base_ads
     description: Base ads campaigns table (google ads and facebook)
+  - name: ga4_sessions
+    description: Sessions from ga4 with ads campaigns
+  - name: stg_lastnondirect
+    description: Last non-direct attribution for ads campaigns
+  - name: ads_campaigns
+    description: Final table for ads campaigns
