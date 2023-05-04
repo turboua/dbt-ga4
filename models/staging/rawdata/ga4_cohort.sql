@@ -68,11 +68,12 @@ with
                 then 'Month_12'
                 else 'Month_er'
             end as month_number,
-            count(first_visit.user_pseudo_id) as num_users
+            count(first_visit.user_pseudo_id) as num_users,
+            first_visit.user_pseudo_id
         from date_difference
         left join
             first_visit on date_difference.user_pseudo_id = first_visit.user_pseudo_id
-        group by 1, 2, 3, 4
+        group by 1, 2, 3, 4, 6
     ),
 
     -- итоговая таблица куда еще добавляется количество всех пользователей в 
@@ -86,6 +87,7 @@ with
         from retention
     )
 select
+    user_pseudo_id,
     cohort_year,
     cohort_month as month,
     month_number,

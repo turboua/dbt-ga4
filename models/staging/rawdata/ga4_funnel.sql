@@ -3,7 +3,7 @@ select
     platform,
     source,
     medium,
-    count(distinct step1_id) as sign_up,
+    count(step1_id) as sign_up,
     count(distinct step2_id) as addtocart,
     count(distinct step3_id) as purchase
 from
