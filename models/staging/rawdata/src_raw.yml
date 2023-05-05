@@ -24,3 +24,5 @@ sources:
         description: Google Ads campaigns
       - name: raw_gads_keywords
         description: Google Ads keywords
+      - name: raw_currency
+        description: Current currencies

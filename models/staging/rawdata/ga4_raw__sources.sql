@@ -26,7 +26,7 @@ select
     quantity,
     margin
 from {{ ref("base_products") }} b
-left join {{ ref("base_ga4__ecommerce") }} g on b.client_id = g.user_pseudo_id
+left join {{ ref("base_ga4__ecommerce") }} g on b.client_id = g.user_pseudo_id and date(b.order_date)=date(g.event_date_dt)
 
 {% if is_incremental() %}
 where order_date > (select max(order_date) from {{ this }})

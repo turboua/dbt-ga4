@@ -16,81 +16,83 @@ WITH
         UNNEST(event_params)
       WHERE
         KEY = 'ga_session_id')) AS session_id,
+    event_timestamp,
+    event_name,
     user_pseudo_id,
     user_id,
     traffic_source.source AS first_source,
     traffic_source.medium AS first_medium,
     traffic_source.name AS first_campaign,
-    MAX((
+    (
       SELECT
         value.string_value
       FROM
         UNNEST(event_params)
       WHERE
-        KEY = 'source')) AS source,
-    MAX((
+        KEY = 'source') AS source,
+   (
       SELECT
         value.string_value
       FROM
         UNNEST(event_params)
       WHERE
-        KEY = 'medium')) AS medium,
-    MAX((
+        KEY = 'medium') AS medium,
+    (
       SELECT
         value.string_value
       FROM
         UNNEST(event_params)
       WHERE
-        KEY = 'campaign')) AS campaign,
-    MAX((
+        KEY = 'campaign') AS campaign,
+   (
       SELECT
         value.int_value
       FROM
         UNNEST(event_params)
       WHERE
-        KEY = 'ga_session_number')) AS session_number,
+        KEY = 'ga_session_number') AS session_number,
         platform,
-    MAX((
+   (
       SELECT
         value.string_value
       FROM
         UNNEST(event_params)
       WHERE
-        KEY = 'page_location') LIKE '%gclid%') AS has_gclid,
-    MAX((
+        KEY = 'page_location') LIKE '%gclid%' AS has_gclid,
+    (
       SELECT
         value.string_value
       FROM
         UNNEST(event_params)
       WHERE
-        KEY = 'page_location') LIKE '%wbraid%') AS has_wbraid,
-    SUM(CASE
+        KEY = 'page_location') LIKE '%wbraid%' AS has_wbraid,
+    CASE
         WHEN event_name = 'page_view' OR event_name = 'screen_view' THEN 1
       ELSE
       0
     END
-      ) AS views
+     AS views
   FROM
-    {{ source("ga4", "events") }}
-  GROUP BY
-    date,
-    session_id,
-    user_pseudo_id,
-    user_id,
-    first_source,
-    first_medium,
-    first_campaign,
-    platform),
+    `turbo-ukr.analytics_286195171.events_*`
+    WHERE event_name = 'page_view' or event_name = 'screen_view'
+  ),
 
 --fix of the gclid problem in the previous table
 --if session_number equals to 1, takes as source, medium and campaign first source, first medium and first campaign
 --if page_location includes gclid or wbraid set source as google and medium as cpc
 --in other cases takes original source, medium and campaign
 
+
+basic_sessions_sources as (
+  select *, first_value(source ignore nulls) over (partition by user_pseudo_id, session_id order by event_timestamp rows between unbounded preceding and unbounded following) as first_session_source,
+  first_value(medium ignore nulls) over (partition by user_pseudo_id, session_id order by event_timestamp rows between unbounded preceding and unbounded following) as first_session_medium,
+  first_value(campaign ignore nulls) over (partition by user_pseudo_id, session_id order by event_timestamp rows between unbounded preceding and unbounded following) as first_session_campaign from session_sources
+),
+
   fix_cpc_session_sources AS (
   SELECT
     date,
-    views,
+    sum(views) as views,
     session_id,
     user_pseudo_id,
     first_source,
@@ -100,35 +102,46 @@ WITH
     CASE
       WHEN session_number = 1 THEN first_source
       WHEN (has_gclid IS TRUE
-      AND source IS NULL)
+      AND first_session_source IS NULL)
     OR (has_wbraid IS TRUE
-      AND source IS NULL) THEN 'google'
+      AND first_session_source IS NULL) THEN 'google'
     ELSE
-    source
+    first_session_source
   END
     AS source,
     CASE
       WHEN session_number = 1 THEN first_medium
       WHEN (has_gclid IS TRUE
-      AND medium IS NULL)
+      AND first_session_medium IS NULL)
     OR (has_wbraid IS TRUE
-      AND medium IS NULL) THEN 'cpc'
+      AND first_session_medium IS NULL) THEN 'cpc'
     ELSE
-    medium
+    first_session_medium
   END
     AS medium,
     CASE
       WHEN session_number = 1 THEN first_campaign
       WHEN (has_gclid IS TRUE
-      AND campaign IS NULL)
+      AND first_session_campaign IS NULL)
     OR (has_wbraid IS TRUE
-      AND campaign IS NULL) THEN '(cpc)'
+      AND first_session_campaign IS NULL) THEN '(cpc)'
     ELSE
-    campaign
+    first_session_campaign
   END
     AS campaign
   FROM
-    session_sources),
+    basic_sessions_sources
+  GROUP BY
+  date,
+  session_id,
+    user_pseudo_id,
+    first_source,
+    first_medium,
+    first_campaign,
+    platform,
+    source,
+    medium,
+    campaign),
 
 --agregates same sessions that may have filled and empty source/medium. Window function fill nulls
 -- takes sessions that have page_views > 0
@@ -172,7 +185,7 @@ WITH
     WHERE
       KEY = 'page_location') AS page_path,
   FROM
-    {{ source("ga4", "events") }} ),
+    `turbo-ukr.analytics_286195171.events_*` ),
   all_page_path_window AS (
   SELECT
     date,
@@ -205,7 +218,7 @@ WITH
     user_pseudo_id,
     event_timestamp
   FROM
-    {{ source("ga4", "events") }}),
+    `turbo-ukr.analytics_286195171.events_*`),
 
 --takes session_id, user_pseudo_id and adds one column with timestamp of the first event as a session start and the second with timestamp of the last evens as session end
   session_start_end_arr AS (
@@ -247,25 +260,25 @@ WITH
     fix_duplicates.user_pseudo_id,
     first_page_path.page_path,
     CASE
-      WHEN first_page_path.page_path LIKE '%utm_source=%' THEN REPLACE(REGEXP_EXTRACT(first_page_path.page_path, r'.*utm_source=([^&]+).*'),'%5C','\\')
+      WHEN fix_duplicates.source is null and first_page_path.page_path LIKE '%utm_source=%' THEN REPLACE(REGEXP_EXTRACT(first_page_path.page_path, r'.*utm_source=([^&]+).*'),'%5C','\\')
       ELSE
       fix_duplicates.source
     END
       AS source,
       CASE
-        WHEN first_page_path.page_path LIKE '%utm_medium=%' THEN REPLACE(REGEXP_EXTRACT(first_page_path.page_path, r'.*utm_medium=([^&]+).*'),'%5C','\\')
+        WHEN fix_duplicates.medium is null and first_page_path.page_path LIKE '%utm_medium=%' THEN REPLACE(REGEXP_EXTRACT(first_page_path.page_path, r'.*utm_medium=([^&]+).*'),'%5C','\\')
         ELSE
         fix_duplicates.medium
       END
         AS medium,
         CASE
-          WHEN first_page_path.page_path LIKE '%utm_campaign=%' THEN REPLACE(REGEXP_EXTRACT(first_page_path.page_path, r'.*utm_campaign=([^&]+).*'),'%5C','\\')
+          WHEN fix_duplicates.campaign is null and  first_page_path.page_path LIKE '%utm_campaign=%' THEN REPLACE(REGEXP_EXTRACT(first_page_path.page_path, r'.*utm_campaign=([^&]+).*'),'%5C','\\')
           ELSE
           fix_duplicates.campaign
         END
           AS campaign,
           REGEXP_EXTRACT(first_page_path.page_path, r'.*[&?]campaign_id=([^&]+).*') AS campaign_id,
-          REPLACE( REGEXP_EXTRACT(first_page_path.page_path, r'.*[&?]utm_content=([^&]+).*'), '%5C', '\\' ) AS ad_group,
+          CASE WHEN campaign not like '%Performance Max%' then REPLACE( REGEXP_EXTRACT(first_page_path.page_path, r'.*[&?]utm_content=([^&]+).*'), '%5C', '\\' ) ELSE null end AS ad_group,
             REGEXP_EXTRACT(first_page_path.page_path, r'.*[&?]adset_id=([^&]+).*') AS ad_group_id,
             REGEXP_EXTRACT(first_page_path.page_path, r'.*[&?]utm_ad=([^&]+).*') AS ad_id,
             fix_duplicates.platform,
@@ -318,7 +331,7 @@ WITH
             COUNT(transaction_id) AS transactions,
             SUM(value) AS revenue
           FROM
-            {{ ref("base_deals") }}
+            `turbo-ukr.reporting_data.base_deals`
            
           GROUP BY
             date,
@@ -472,9 +485,7 @@ WITH
             campaign
           END
             AS campaign,
-            campaign_id,
             ad_group,
-            ad_group_id,
             ad_id,
             platform,
             SUM(views) AS views,

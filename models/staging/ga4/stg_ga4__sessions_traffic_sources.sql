@@ -1,13 +1,20 @@
+{{ config(materialized="table") }}
+
 with session_events as (
     select 
+        event_date_dt,
+        user_pseudo_id,
         session_key,
         event_timestamp,
         lower(source) as source,
         medium,
         campaign,
-        source_category
+        source_category,
+        platform
     from {{ref('stg_ga4__events')}}
     left join {{ref('ga4_source_categories')}} using (source)
+    
+    
     --exclude the events session_start and first_visit because they are triggered first but never contain source, medium, campaign values
     where not ( event_name = "session_start" or event_name = "first_visit")
     and session_key is not null
@@ -20,8 +27,9 @@ set_default_channel_grouping as (
 ),
 session_source as (
     select    
-        session_key,
-
+        event_date_dt,
+        platform,
+        user_pseudo_id,
         (case
           when FIRST_VALUE(source) OVER (PARTITION BY session_key ORDER BY event_timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) is null then "(direct)"
           else FIRST_VALUE(source) OVER (PARTITION BY session_key ORDER BY event_timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) end
@@ -40,5 +48,6 @@ session_source as (
         FIRST_VALUE(default_channel_grouping) OVER (PARTITION BY session_key ORDER BY event_timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS session_default_channel_grouping
     from set_default_channel_grouping
 )
+
 
 select distinct  * from session_source

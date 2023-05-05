@@ -1,4 +1,4 @@
-{{ config(materialized='incremental')}}
+
 
 select
     date,
@@ -16,19 +16,12 @@ select
     costmicros as cost
 from {{ source("raw_ads", "raw_gads_campaigns") }}
 
--- this filter will only be applied on an incremental run
-{% if is_incremental() %}
-
- where date > (select max(date) from {{ this }}) 
-
-{% endif %}
-
 group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
 
 union all
 
 select
-    date,
+    f.date,
     'Facebook' as account_type,
     'Default Facebook account' as account_name,
     'Default Facebook campaign' as campaign_type,
@@ -40,14 +33,8 @@ select
     ad_name,
     impressions,
     clicks,
-    spend as cost
-from {{ source("raw_ads", "raw_facebook") }}
-
--- this filter will only be applied on an incremental run
-{% if is_incremental() %}
-
- where date > (select max(date) from {{ this }}) 
-
-{% endif %}
+    spend*rate as cost
+from {{ source("raw_ads", "raw_facebook") }} f
+left join {{ source("raw_ads", "raw_currency") }} c on f.date = c.date
 
 group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
