@@ -1,4 +1,4 @@
-
+{{ config(materialized='table')}}
 
 select
     date,
@@ -16,8 +16,6 @@ select
     costmicros as cost
 from {{ source("raw_ads", "raw_gads_campaigns") }}
 
-group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
-
 union all
 
 select
@@ -33,8 +31,9 @@ select
     ad_name,
     impressions,
     clicks,
-    spend*rate as cost
+    case when rate is not null then spend*rate
+    when rate is null then spend*LAST_VALUE(rate IGNORE NULLS) OVER(ORDER BY date_sub(f.date, interval 1 day))
+    else spend*rate
+    end as cost
 from {{ source("raw_ads", "raw_facebook") }} f
 left join {{ source("raw_ads", "raw_currency") }} c on f.date = c.date
-
-group by 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13

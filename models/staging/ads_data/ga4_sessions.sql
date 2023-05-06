@@ -1,3 +1,5 @@
+{{ config(materialized='table')}}
+
 WITH
 
 --base table from GA with source, medium, campaign
@@ -71,10 +73,16 @@ WITH
       ELSE
       0
     END
-     AS views
+     AS views,
+      CASE
+        WHEN event_name = 'sign_up' THEN 1
+      ELSE
+      0
+    END
+     AS signup
   FROM
     `turbo-ukr.analytics_286195171.events_*`
-    WHERE event_name = 'page_view' or event_name = 'screen_view'
+    WHERE event_name = 'page_view' or event_name = 'screen_view' or event_name = 'sign_up'
   ),
 
 --fix of the gclid problem in the previous table
@@ -93,6 +101,7 @@ basic_sessions_sources as (
   SELECT
     date,
     sum(views) as views,
+    sum(signup) as signup,
     session_id,
     user_pseudo_id,
     first_source,
@@ -150,6 +159,7 @@ basic_sessions_sources as (
   SELECT
     date,
     views,
+    signup,
     session_id,
     user_pseudo_id,
     first_source,
@@ -282,7 +292,8 @@ basic_sessions_sources as (
             REGEXP_EXTRACT(first_page_path.page_path, r'.*[&?]adset_id=([^&]+).*') AS ad_group_id,
             REGEXP_EXTRACT(first_page_path.page_path, r'.*[&?]utm_ad=([^&]+).*') AS ad_id,
             fix_duplicates.platform,
-            SUM(fix_duplicates.views) AS views
+            SUM(fix_duplicates.views) AS views,
+            SUM(fix_duplicates.signup) AS signup
           FROM
             fix_duplicates
           LEFT JOIN
@@ -328,8 +339,11 @@ basic_sessions_sources as (
           END
             AS client_id,
             platform,
+            gender,
+            birth_date,
             COUNT(transaction_id) AS transactions,
-            SUM(value) AS revenue
+            SUM(value) AS revenue,
+            SUM(margin) as margin
           FROM
             `turbo-ukr.reporting_data.base_deals`
            
@@ -339,7 +353,9 @@ basic_sessions_sources as (
             date_time,
             user_id,
             client_id,
-            platform ),
+            platform,
+            gender,
+            birth_date ),
 
 --joins final_ga_table with crm_revenue 
 --joins with transaction on client_id and if time of the transaction is more then session start time and less then ession end time + 30 minutes
@@ -362,7 +378,8 @@ basic_sessions_sources as (
             final_ga_table.platform,
             UPPER(crm_revenue.platform) as platform_crm,
             SUM(crm_revenue.transactions) AS transactions,
-            SUM(crm_revenue.revenue) AS revenue
+            SUM(crm_revenue.revenue) AS revenue,
+            SUM(crm_revenue.margin) AS margin
           FROM
             crm_revenue
           LEFT JOIN
@@ -415,7 +432,8 @@ basic_sessions_sources as (
           END
             AS platform,
             transactions,
-            revenue
+            revenue,
+            margin
           FROM
             crm_revenue_ga),
 
@@ -435,8 +453,10 @@ basic_sessions_sources as (
             ad_id,
             platform,
             views,
+            signup,
             0 AS transactions,
-            0 AS revenue
+            0 AS revenue,
+            0 as margin
           FROM
             final_ga_table
           WHERE views IS NOT NULL
@@ -455,10 +475,54 @@ basic_sessions_sources as (
             ad_id,
             platform,
             0 AS views,
+            0 as signup,
             transactions,
-            revenue
+            revenue,
+            margin
           FROM
             crm_revenue_ga_fix_uid ),
+
+-- gets user_id, gender and age
+
+crm_demografics as(SELECT
+ user_id,
+            
+            client_id,
+          
+             gender, birth_date  FROM
+            `turbo-ukr.reporting_data.base_deals`
+),
+
+ga_demografics as (
+
+  select 
+
+  date,
+            all_sessions_transactions.session_id,
+            all_sessions_transactions.session_start,
+            all_sessions_transactions.user_pseudo_id,
+            all_sessions_transactions.source,
+            all_sessions_transactions.medium,
+            all_sessions_transactions.campaign,
+            all_sessions_transactions.campaign_id,
+            all_sessions_transactions.ad_group,
+            all_sessions_transactions.ad_group_id,
+            all_sessions_transactions.ad_id,
+            all_sessions_transactions.platform,
+            crm_demografics.gender,
+            crm_demografics.birth_date,
+            all_sessions_transactions.views,
+            all_sessions_transactions.signup,
+            all_sessions_transactions.transactions,
+            all_sessions_transactions.revenue,
+            all_sessions_transactions.margin
+  FROM all_sessions_transactions left join
+crm_demografics ON
+all_sessions_transactions.user_pseudo_id = crm_demografics.client_id or
+all_sessions_transactions.user_pseudo_id = crm_demografics.user_id
+
+),
+
 
 --aggregates union all table and replaces nulls in sources as direct           
           all_views_transactions_agg AS (
@@ -488,11 +552,15 @@ basic_sessions_sources as (
             ad_group,
             ad_id,
             platform,
+            gender,
+            birth_date,
             SUM(views) AS views,
+            SUM(signup) AS signup,
             SUM(transactions) AS transactions,
             SUM(revenue) AS revenue,
+            sum(margin) AS margin
           FROM
-            all_sessions_transactions
+            ga_demografics
           GROUP BY
             date,
             user_pseudo_id,
@@ -505,7 +573,9 @@ basic_sessions_sources as (
             ad_group,
             ad_group_id,
             ad_id,
-            platform)
+            platform,
+            gender,
+            birth_date)
 
 
 
