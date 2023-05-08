@@ -77,7 +77,7 @@ WITH
   END
     AS addtocart
   FROM
-    {{ source('ga4', 'events') }}
+    `turbo-ukr.analytics_286195171.events_*`
   WHERE
     event_name = 'page_view'
     OR event_name = 'screen_view'
@@ -188,7 +188,7 @@ WITH
     WHERE
       KEY = 'page_location') AS page_path,
   FROM
-    {{ source('ga4', 'events') }} ),
+    `turbo-ukr.analytics_286195171.events_*` ),
   all_page_path_window AS (
   SELECT
     date,
@@ -220,7 +220,7 @@ WITH
     user_pseudo_id,
     event_timestamp
   FROM
-    {{ source('ga4', 'events') }}),
+    `turbo-ukr.analytics_286195171.events_*`),
 
 --takes session_id, user_pseudo_id and adds one column with timestamp of the first event as a session start and the second with timestamp of the last evens as session end
   session_start_end_arr AS (
@@ -336,7 +336,9 @@ WITH
         SUM(value) AS revenue,
         SUM(margin) AS margin
       FROM
-        {{ ref("base_deals") }} 
+        `turbo-ukr.reporting_data.base_deals` --
+      -- WHERE
+      --   DATE(order_date) = '2023-05-01'
       GROUP BY
         date,
         order_date,
@@ -354,7 +356,8 @@ WITH
       SELECT
         *,
         SUM(revenue) OVER (PARTITION BY user_id ORDER BY UNIX_MICROS(order_date)) AS ltv,
-      FROM
+         COUNT(transaction_id) OVER (PARTITION BY user_id ORDER BY UNIX_MICROS(order_date)) AS all_orders,
+       FROM
         crm_revenue ),
 
 --joins final_ga_table with crm_revenue 
@@ -385,6 +388,7 @@ WITH
         crm_revenue_ltv.revenue,
         crm_revenue_ltv.margin,
         crm_revenue_ltv.ltv,
+        crm_revenue_ltv.all_orders
       FROM
         crm_revenue_ltv
       LEFT JOIN
@@ -407,6 +411,7 @@ WITH
         session_start
       END
         AS session_start,
+        order_date,
         CASE
           WHEN user_pseudo_id IS NULL and  client_id IS NOT NULL THEN client_id
           WHEN user_pseudo_id IS NULL and client_id IS NULL THEN user_id
@@ -437,9 +442,19 @@ WITH
         transactions,
         revenue,
         margin,
-        ltv
+        ltv,
+        all_orders
       FROM
         crm_revenue_ga),
+
+--is first order    
+      crm_revenue_ga_is_first AS (
+      SELECT
+        *,
+        CASE WHEN order_date = first_value(order_date) over (partition by user_pseudo_id order by order_date) THEN 1
+        ELSE 0 END as isFirst
+      FROM
+        crm_revenue_ga_fix_uid),
 
 --fix empty session_id
       fix_session_id as(
@@ -451,6 +466,7 @@ WITH
         END 
         as session_id,
         session_start,
+        order_date,
         user_pseudo_id,
         user_type,
         source,
@@ -462,12 +478,14 @@ WITH
         gender,
         birth_date,
         transaction_id,
+        isFirst,
         transactions,
         revenue,
         margin,
-        ltv
+        ltv,
+        all_orders
       FROM
-        crm_revenue_ga_fix_uid
+        crm_revenue_ga_is_first
       ),
 
 --makes UNION ALL with final_ga_table to get all user activity
@@ -476,6 +494,7 @@ WITH
         date,
         session_id,
         session_start,
+        CAST(NULL AS TIMESTAMP) AS order_date,
         user_pseudo_id,
         user_type,
         source,
@@ -487,13 +506,15 @@ WITH
         CAST(NULL AS STRING) AS gender,
         CAST(NULL AS STRING) AS birth_date,
         CAST (NULL AS STRING) AS transaction_id,
+        null as isFirst,
         views,
         sign_up,
         addtocart,
         0 AS transactions,
         0 AS revenue,
         0 AS margin,
-        0 AS ltv
+        0 AS ltv,
+        0 as all_orders
       FROM
         final_ga_table
       WHERE
@@ -503,6 +524,7 @@ WITH
         date,
         session_id,
         session_start,
+        order_date,
         user_pseudo_id,
         user_type,
         source,
@@ -514,13 +536,15 @@ WITH
         gender,
         birth_date,
         transaction_id,
+        isFirst,
         0 AS views,
         0 AS sign_up,
         0 AS addtocart,
         transactions,
         revenue,
         margin,
-        ltv
+        ltv,
+        all_orders
       FROM
         fix_session_id),
 
@@ -530,6 +554,10 @@ WITH
         date,
         session_id,
         session_start,
+        CASE WHEN order_date IS NULL THEN first_value(order_date IGNORE NULLS) OVER (PARTITION BY user_pseudo_id, session_id order by session_start)
+        ELSE order_date
+        END 
+        AS order_date,
         user_pseudo_id,
         user_type,
         source,
@@ -553,65 +581,111 @@ WITH
         ELSE transaction_id
         END 
         AS transaction_id,
+        isFirst,
         views,
         sign_up,
         addtocart,
         transactions,
         revenue,
         margin,
-        ltv
+        ltv,
+        all_orders
         FROM all_sessions_transactions
 
       ),
+
+-- aggregates all
+empty_pam_agg as (
+
+  SELECT 
+  date,
+        session_id,
+        session_start,
+        order_date
+        order_date,
+        user_pseudo_id,
+        user_type,
+        source,
+        medium,
+        first_source,
+        first_medium,
+        platform,
+        payment_method,
+        gender,
+        birth_date,
+        transaction_id,
+        sum(isFirst) as isFirst,
+        sum(views) as views,
+        sum(sign_up) as sign_up,
+        sum(addtocart) as addtocart,
+        sum(transactions) as transactions,
+        sum(revenue) as revenue,
+        sum(margin) as margin,
+        sum(ltv) as ltv,
+        sum(all_orders) as all_orders
+        FROM empty_pam
+        GROUP BY
+        date,
+        session_id,
+        session_start,
+        order_date,
+        user_pseudo_id,
+        user_type,
+        source,
+        medium,
+        first_source,
+        first_medium,
+        platform,
+        payment_method,
+        gender,
+        birth_date,
+        transaction_id
+),
 
 --gets product from stg table
 products_table AS(
   SELECT
     transaction_id,
-    ARRAY_AGG(STRUCT(product_name,
-        product_id,
-        price,
-        margin,
-        product_category,
-        product_category2,
-        parent_category,
-        quantity)) AS products
+    products,
+    delivery
   FROM
-    {{ ref("stg_products") }}
-  GROUP BY
-    transaction_id ),
+    `turbo-ukr.raw_data.raw_deals`),
 
 --join products to crm data
 crm_revenue_agg AS (
   SELECT
-  empty_pam.date,
-        empty_pam.session_id,
-        empty_pam.session_start,
-        empty_pam.user_pseudo_id,
-        empty_pam.user_type,
-        empty_pam.source,
-        empty_pam.medium,
-        empty_pam.first_source,
-        empty_pam.first_medium,
-        empty_pam.platform,
-        empty_pam.payment_method,
-        empty_pam.gender,
-        empty_pam.birth_date,
-        empty_pam.transaction_id,
-        empty_pam.views,
-        empty_pam.sign_up,
-        empty_pam.addtocart,
-        empty_pam.transactions,
-        empty_pam.revenue,
-        empty_pam.margin,
-        empty_pam.ltv,
-        products_table.products
+  empty_pam_agg.date,
+        empty_pam_agg.session_id,
+        empty_pam_agg.session_start,
+        empty_pam_agg.order_date,
+        empty_pam_agg.user_pseudo_id,
+        empty_pam_agg.user_type,
+        empty_pam_agg.source,
+        empty_pam_agg.medium,
+        empty_pam_agg.first_source,
+        empty_pam_agg.first_medium,
+        empty_pam_agg.platform,
+        empty_pam_agg.payment_method,
+        empty_pam_agg.gender,
+        empty_pam_agg.birth_date,
+        empty_pam_agg.transaction_id,
+        empty_pam_agg.isFirst,
+        empty_pam_agg.views,
+        empty_pam_agg.sign_up,
+        empty_pam_agg.addtocart,
+        empty_pam_agg.transactions,
+        empty_pam_agg.revenue,
+        empty_pam_agg.margin,
+        empty_pam_agg.ltv,
+        empty_pam_agg.all_orders,
+        products_table.products,
+        products_table.delivery
   FROM
-    empty_pam
+    empty_pam_agg
   LEFT JOIN
     products_table
   ON
-    empty_pam.transaction_id = products_table.transaction_id ),
+    empty_pam_agg.transaction_id = products_table.transaction_id ),
 
 --agregates all data
       all_views_transactions_agg AS (
@@ -619,6 +693,7 @@ crm_revenue_agg AS (
         session_id,
         date,
         session_start,
+        order_date,
         user_pseudo_id,
         user_type,
         CASE
@@ -640,16 +715,30 @@ crm_revenue_agg AS (
         gender,
         birth_date,
         transaction_id,
+        isFirst,
         products,
+        delivery,
         views,
         sign_up,
         addtocart,
         transactions,
         revenue,
         margin,
-        ltv
+        ltv,
+        all_orders
       FROM
         crm_revenue_agg),
+
+--adds signup to order rate
+signup_to_order as (
+
+  SELECT *, CASE WHEN sum(sign_up) over (partition by user_pseudo_id order by session_start ROWS between unbounded preceding and current row ) > 0 THEN 1
+  WHEN sum(transactions) over (partition by user_pseudo_id order by session_start ROWS between unbounded preceding and current row) > 0 THEN 1
+  ELSE 0 END as isSignup, 
+  CASE WHEN sum(transactions) over (partition by user_pseudo_id order by session_start ROWS between unbounded preceding and current row) > 0 THEN 1
+  ELSE 0 END as isOrder
+     FROM all_views_transactions_agg
+),
 
 --add last session_start time where source is not direct 
       last_non_direct_time AS(
@@ -660,7 +749,7 @@ crm_revenue_agg AS (
         END
           ) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) AS max_non_direct_time
       FROM
-        all_views_transactions_agg ),
+        signup_to_order ),
 
 --in case wgen session start time is bigger then last non direct time returns sum of conversions        
       last_direct_revenue AS (
@@ -699,6 +788,7 @@ crm_revenue_agg AS (
         date,
         session_id,
         session_start,
+        order_date,
         user_pseudo_id,
         user_type,
         source,
@@ -710,11 +800,16 @@ crm_revenue_agg AS (
         gender,
         birth_date,
         transaction_id,
+        isFirst,
+        isSignup,
+        isOrder,
         products,
+        delivery,
         views,
         sign_up,
         addtocart,
         ltv,
+        all_orders,
         transactions,
         revenue,
         margin,
@@ -771,6 +866,7 @@ crm_revenue_agg AS (
         date,
         session_id,
         session_start,
+        order_date,
         user_pseudo_id,
         user_type,
         source,
@@ -780,10 +876,15 @@ crm_revenue_agg AS (
         gender,
         birth_date,
         transaction_id,
+        isFirst,
+        isSignup,
+        isOrder,
         products,
+        delivery,
         views,
         addtocart,
         ltv,
+        all_orders,
         sign_up,
         transactions,
         revenue,
