@@ -7,7 +7,7 @@ WITH
     END
       ) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) AS max_non_direct_time
   FROM
-    {{ ref("ga4_sessions") }} ),
+    {{ ref("ads_sessions") }} ),
   last_direct_revenue AS (
   SELECT
     *,
