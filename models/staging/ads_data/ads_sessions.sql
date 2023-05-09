@@ -488,6 +488,8 @@ basic_sessions_sources as (
             ad_group,
             ad_id,
             platform,
+            COUNT(user_pseudo_id) as users,
+            COUNT(session_id) as sessions,
             SUM(views) AS views,
             SUM(transactions) AS transactions,
             SUM(revenue) AS revenue,

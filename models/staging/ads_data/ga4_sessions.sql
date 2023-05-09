@@ -77,7 +77,7 @@ WITH
   END
     AS addtocart
   FROM
-    `turbo-ukr.analytics_286195171.events_*`
+    {{ source('ga4', 'events') }}
   WHERE
     event_name = 'page_view'
     OR event_name = 'screen_view'
@@ -188,7 +188,7 @@ WITH
     WHERE
       KEY = 'page_location') AS page_path,
   FROM
-    `turbo-ukr.analytics_286195171.events_*` ),
+    {{ source('ga4', 'events') }} ),
   all_page_path_window AS (
   SELECT
     date,
@@ -220,7 +220,7 @@ WITH
     user_pseudo_id,
     event_timestamp
   FROM
-    `turbo-ukr.analytics_286195171.events_*`),
+    {{ source('ga4', 'events') }}),
 
 --takes session_id, user_pseudo_id and adds one column with timestamp of the first event as a session start and the second with timestamp of the last evens as session end
   session_start_end_arr AS (
@@ -332,13 +332,12 @@ WITH
         gender,
         birth_date,
         transaction_id,
+        status,
         COUNT(transaction_id) AS transactions,
         SUM(value) AS revenue,
         SUM(margin) AS margin
       FROM
-        `turbo-ukr.reporting_data.base_deals` --
-      -- WHERE
-      --   DATE(order_date) = '2023-05-01'
+        {{ ref("base_deals") }} 
       GROUP BY
         date,
         order_date,
@@ -349,7 +348,8 @@ WITH
         payment_method,
         gender,
         birth_date,
-        transaction_id ),
+        transaction_id,
+        status ),
 
 -- get running sum of revenue by user
       crm_revenue_ltv AS (
@@ -384,6 +384,7 @@ WITH
         crm_revenue_ltv.gender,
         crm_revenue_ltv.birth_date,
         crm_revenue_ltv.transaction_id,
+        crm_revenue_ltv.status,
         crm_revenue_ltv.transactions,
         crm_revenue_ltv.revenue,
         crm_revenue_ltv.margin,
@@ -439,6 +440,7 @@ WITH
         gender,
         birth_date,
         transaction_id,
+        status,
         transactions,
         revenue,
         margin,
@@ -478,6 +480,8 @@ WITH
         gender,
         birth_date,
         transaction_id,
+        CASE WHEN status = 'Success' THEN 1
+        ELSE 0 END as status,
         isFirst,
         transactions,
         revenue,
@@ -506,6 +510,7 @@ WITH
         CAST(NULL AS STRING) AS gender,
         CAST(NULL AS STRING) AS birth_date,
         CAST (NULL AS STRING) AS transaction_id,
+        0 AS status,
         null as isFirst,
         views,
         sign_up,
@@ -536,6 +541,7 @@ WITH
         gender,
         birth_date,
         transaction_id,
+        status,
         isFirst,
         0 AS views,
         0 AS sign_up,
@@ -581,6 +587,7 @@ WITH
         ELSE transaction_id
         END 
         AS transaction_id,
+        status,
         isFirst,
         views,
         sign_up,
@@ -614,6 +621,7 @@ empty_pam_agg as (
         gender,
         birth_date,
         transaction_id,
+        sum(status) as status,
         sum(isFirst) as isFirst,
         sum(views) as views,
         sum(sign_up) as sign_up,
@@ -649,7 +657,7 @@ products_table AS(
     products,
     delivery
   FROM
-    `turbo-ukr.raw_data.raw_deals`),
+    {{ source("raw_db", "raw_deals") }}),
 
 --join products to crm data
 crm_revenue_agg AS (
@@ -669,6 +677,7 @@ crm_revenue_agg AS (
         empty_pam_agg.gender,
         empty_pam_agg.birth_date,
         empty_pam_agg.transaction_id,
+        empty_pam_agg.status,
         empty_pam_agg.isFirst,
         empty_pam_agg.views,
         empty_pam_agg.sign_up,
@@ -715,6 +724,7 @@ crm_revenue_agg AS (
         gender,
         birth_date,
         transaction_id,
+        status,
         isFirst,
         products,
         delivery,
@@ -800,6 +810,7 @@ signup_to_order as (
         gender,
         birth_date,
         transaction_id,
+        status,
         isFirst,
         isSignup,
         isOrder,
@@ -876,6 +887,7 @@ signup_to_order as (
         gender,
         birth_date,
         transaction_id,
+        status,
         isFirst,
         isSignup,
         isOrder,
