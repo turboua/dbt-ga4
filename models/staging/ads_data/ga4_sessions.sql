@@ -22,6 +22,7 @@ WITH
     user_id,
     traffic_source.source AS first_source,
     traffic_source.medium AS first_medium,
+    device.category AS device,
     (
     SELECT
       value.string_value
@@ -77,7 +78,7 @@ WITH
   END
     AS addtocart
   FROM
-    {{ source('ga4', 'events') }}
+    `turbo-ukr.analytics_286195171.events_*`
   WHERE
     event_name = 'page_view'
     OR event_name = 'screen_view'
@@ -113,6 +114,7 @@ WITH
     AS user_type,
     first_source,
     first_medium,
+    device,
     platform,
     CASE
       WHEN session_number = 1 THEN first_source
@@ -143,6 +145,7 @@ WITH
     user_type,
     first_source,
     first_medium,
+    device,
     platform,
     source,
     medium),
@@ -160,6 +163,7 @@ WITH
     user_type,
     first_source,
     first_medium,
+    device,
     platform,
     COALESCE(source, LAST_VALUE(source IGNORE NULLS) OVER (PARTITION BY session_id ORDER BY source DESC)) AS source,
     COALESCE(medium, LAST_VALUE(medium IGNORE NULLS) OVER (PARTITION BY session_id ORDER BY medium DESC)) AS medium,
@@ -188,7 +192,7 @@ WITH
     WHERE
       KEY = 'page_location') AS page_path,
   FROM
-    {{ source('ga4', 'events') }} ),
+    `turbo-ukr.analytics_286195171.events_*` ),
   all_page_path_window AS (
   SELECT
     date,
@@ -220,7 +224,7 @@ WITH
     user_pseudo_id,
     event_timestamp
   FROM
-    {{ source('ga4', 'events') }}),
+    `turbo-ukr.analytics_286195171.events_*`),
 
 --takes session_id, user_pseudo_id and adds one column with timestamp of the first event as a session start and the second with timestamp of the last evens as session end
   session_start_end_arr AS (
@@ -275,6 +279,10 @@ WITH
         AS medium,
         fix_duplicates.first_source,
         fix_duplicates.first_medium,
+        fix_duplicates.device,
+        CASE WHEN platform = 'IOS' then 'IOS'
+        WHEN platform = 'ANDROID' then 'ANDROID'
+        WHEN platform = 'WEB' then CONCAT(UPPER(device), ' ', platform) END as device_platform,
         fix_duplicates.platform,
         SUM(fix_duplicates.views) AS views,
         SUM(fix_duplicates.sign_up) AS sign_up,
@@ -303,6 +311,7 @@ WITH
         medium,
         fix_duplicates.first_source,
         fix_duplicates.first_medium,
+        fix_duplicates.device,
         fix_duplicates.platform),
 
 --takes transactions data from the base_deals table
@@ -337,7 +346,9 @@ WITH
         SUM(value) AS revenue,
         SUM(margin) AS margin
       FROM
-        {{ ref("base_deals") }} 
+        `turbo-ukr.reporting_data.base_deals` --
+      -- WHERE
+      --   DATE(order_date) = '2023-05-01'
       GROUP BY
         date,
         order_date,
@@ -378,6 +389,7 @@ WITH
         final_ga_table.medium,
         final_ga_table.first_source,
         final_ga_table.first_medium,
+        final_ga_table.device,
         final_ga_table.platform,
         crm_revenue_ltv.payment_method,
         UPPER(crm_revenue_ltv.platform) AS platform_crm,
@@ -430,12 +442,11 @@ WITH
         medium,
         first_source,
         first_medium,
+        device,
         CASE
           WHEN platform IS NULL THEN platform_crm
         ELSE
-        platform
-      END
-        AS platform,
+        platform END AS platform,
         payment_method,
         gender,
         birth_date,
@@ -475,6 +486,10 @@ WITH
         medium,
         first_source,
         first_medium,
+        device,
+        CASE WHEN platform = 'IOS' then 'IOS'
+        WHEN platform = 'ANDROID' then 'ANDROID'
+        WHEN platform = 'WEB' then CONCAT(UPPER(device), ' ', platform) END as device_platform,
         platform,
         payment_method,
         gender,
@@ -505,6 +520,8 @@ WITH
         medium,
         first_source,
         first_medium,
+        device,
+        device_platform,
         platform,
         CAST(NULL AS STRING) AS payment_method,
         CAST(NULL AS STRING) AS gender,
@@ -536,6 +553,8 @@ WITH
         medium,
         first_source,
         first_medium,
+        device,
+        device_platform,
         platform,
         payment_method,
         gender,
@@ -570,6 +589,8 @@ WITH
         medium,
         first_source,
         first_medium,
+        device,
+        device_platform,
         platform,
         CASE WHEN payment_method IS NULL THEN first_value(payment_method IGNORE NULLS) OVER (PARTITION BY user_pseudo_id, session_id order by session_start)
         ELSE payment_method
@@ -616,6 +637,8 @@ empty_pam_agg as (
         medium,
         first_source,
         first_medium,
+        device,
+        device_platform,
         platform,
         payment_method,
         gender,
@@ -643,6 +666,8 @@ empty_pam_agg as (
         medium,
         first_source,
         first_medium,
+        device,
+        device_platform,
         platform,
         payment_method,
         gender,
@@ -657,7 +682,7 @@ products_table AS(
     products,
     delivery
   FROM
-    {{ source("raw_db", "raw_deals") }}),
+    `turbo-ukr.raw_data.raw_deals`),
 
 --join products to crm data
 crm_revenue_agg AS (
@@ -672,6 +697,8 @@ crm_revenue_agg AS (
         empty_pam_agg.medium,
         empty_pam_agg.first_source,
         empty_pam_agg.first_medium,
+        empty_pam_agg.device,
+        empty_pam_agg.device_platform,
         empty_pam_agg.platform,
         empty_pam_agg.payment_method,
         empty_pam_agg.gender,
@@ -719,6 +746,8 @@ crm_revenue_agg AS (
         AS medium,
         first_source,
         first_medium,
+        device,
+        device_platform,
         platform,
         payment_method,
         gender,
@@ -805,6 +834,8 @@ signup_to_order as (
         medium,
         first_source,
         first_medium,
+        device,
+        device_platform,
         platform,
         payment_method,
         gender,
@@ -882,6 +913,8 @@ signup_to_order as (
         user_type,
         source,
         medium,
+        device,
+        device_platform,
         platform,
         payment_method,
         gender,
