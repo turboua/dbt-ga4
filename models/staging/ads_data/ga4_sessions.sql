@@ -22,6 +22,7 @@ WITH
     user_id,
     traffic_source.source AS first_source,
     traffic_source.medium AS first_medium,
+    traffic_source.name as first_campaign,
     device.category AS device,
     (
     SELECT
@@ -37,6 +38,13 @@ WITH
       UNNEST(event_params)
     WHERE
       KEY = 'medium') AS medium,
+    (
+    SELECT
+      value.string_value
+    FROM
+      UNNEST(event_params)
+    WHERE
+      KEY = 'campaign') AS campaign,
     (
     SELECT
       value.int_value
@@ -78,7 +86,7 @@ WITH
   END
     AS addtocart
   FROM
-    `turbo-ukr.analytics_286195171.events_*`),
+    {{ source('ga4', 'events') }}),
 --   WHERE
 --     event_name = 'page_view'
 --     OR event_name = 'screen_view'
@@ -86,11 +94,12 @@ WITH
 --     OR event_name = 'add_to_cart' 
 
 --if durring one session user had two or more sources, CTE takes first one
-  basic_sessions_sources AS (
+ basic_sessions_sources AS (
   SELECT
     *,
     FIRST_VALUE(source IGNORE NULLS) OVER (PARTITION BY user_pseudo_id, session_id ORDER BY event_timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS first_session_source,
-    FIRST_VALUE(medium IGNORE NULLS) OVER (PARTITION BY user_pseudo_id, session_id ORDER BY event_timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS first_session_medium
+    FIRST_VALUE(medium IGNORE NULLS) OVER (PARTITION BY user_pseudo_id, session_id ORDER BY event_timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS first_session_medium,
+     FIRST_VALUE(campaign IGNORE NULLS) OVER (PARTITION BY user_pseudo_id, session_id ORDER BY event_timestamp ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS first_session_campaign
   FROM
     session_sources ),
 
@@ -137,6 +146,16 @@ WITH
     first_session_medium
   END
     AS medium,
+    CASE
+      WHEN session_number = 1 THEN first_campaign
+      WHEN (has_gclid IS TRUE
+      AND first_session_campaign IS NULL)
+    OR (has_wbraid IS TRUE
+      AND first_session_campaign IS NULL) THEN '(cpc)'
+    ELSE
+    first_session_campaign
+  END
+    as campaign,
   FROM
     basic_sessions_sources
   GROUP BY
@@ -150,7 +169,8 @@ WITH
     device,
     platform,
     source,
-    medium),
+    medium,
+    campaign),
 
 --agregates same sessions that may have filled and empty source/medium. Window function fill nulls
 -- takes sessions that have page_views > 0
@@ -170,6 +190,7 @@ WITH
     platform,
     COALESCE(source, LAST_VALUE(source IGNORE NULLS) OVER (PARTITION BY session_id ORDER BY source DESC)) AS source,
     COALESCE(medium, LAST_VALUE(medium IGNORE NULLS) OVER (PARTITION BY session_id ORDER BY medium DESC)) AS medium,
+    COALESCE(campaign, LAST_VALUE(campaign IGNORE NULLS) OVER (PARTITION BY session_id ORDER BY campaign DESC)) AS campaign,
   FROM
     fix_cpc_session_sources
   WHERE
@@ -195,7 +216,7 @@ WITH
     WHERE
       KEY = 'page_location') AS page_path,
   FROM
-    `turbo-ukr.analytics_286195171.events_*` ),
+    {{ source('ga4', 'events') }} ),
   all_page_path_window AS (
   SELECT
     date,
@@ -227,7 +248,7 @@ WITH
     user_pseudo_id,
     event_timestamp
   FROM
-    `turbo-ukr.analytics_286195171.events_*`),
+    {{ source('ga4', 'events') }}),
 
 --takes session_id, user_pseudo_id and adds one column with timestamp of the first event as a session start and the second with timestamp of the last evens as session end
   session_start_end_arr AS (
@@ -281,6 +302,16 @@ WITH
         fix_duplicates.medium
       END
         AS medium,
+        CASE
+          WHEN fix_duplicates.campaign is null and  first_page_path.page_path LIKE '%utm_campaign=%' THEN REPLACE(REGEXP_EXTRACT(first_page_path.page_path, r'.*utm_campaign=([^&]+).*'),'%5C','\\')
+          ELSE
+          fix_duplicates.campaign
+        END
+          AS campaign,
+          REGEXP_EXTRACT(first_page_path.page_path, r'.*[&?]campaign_id=([^&]+).*') AS campaign_id,
+          CASE WHEN campaign not like '%Performance Max%' then REPLACE( REGEXP_EXTRACT(first_page_path.page_path, r'.*[&?]utm_content=([^&]+).*'), '%5C', '\\' ) ELSE null end AS ad_group,
+            REGEXP_EXTRACT(first_page_path.page_path, r'.*[&?]adset_id=([^&]+).*') AS ad_group_id,
+            REGEXP_EXTRACT(first_page_path.page_path, r'.*[&?]utm_ad=([^&]+).*') AS ad_id,
         fix_duplicates.first_source,
         fix_duplicates.first_medium,
         fix_duplicates.device,
@@ -314,6 +345,11 @@ WITH
         first_page_path.page_path,
         source,
         medium,
+        campaign,
+        campaign_id,
+        ad_group,
+        ad_group_id,
+        ad_id,
         fix_duplicates.first_source,
         fix_duplicates.first_medium,
         fix_duplicates.device,
@@ -330,6 +366,11 @@ final_ga_table as (
     page_path,
     source,
     medium,
+	campaign,
+    campaign_id,
+    ad_group,
+    ad_group_id,
+    ad_id,
     first_source,
     first_medium,
     device,
@@ -373,7 +414,7 @@ final_ga_table as (
         SUM(value) AS revenue,
         SUM(margin) AS margin
       FROM
-        `turbo-ukr.reporting_data.base_deals` --
+        {{ ref("base_deals") }} --
       -- WHERE
       --   DATE(order_date) = '2023-05-01'
       GROUP BY
@@ -415,6 +456,11 @@ final_ga_table as (
         crm_revenue_ltv.user_type_crm,
         final_ga_table.source,
         final_ga_table.medium,
+        final_ga_table.campaign,
+        final_ga_table.campaign_id,
+        final_ga_table.ad_group,
+        final_ga_table.ad_group_id,
+        final_ga_table.ad_id,
         final_ga_table.first_source,
         final_ga_table.first_medium,
         final_ga_table.device,
@@ -429,7 +475,7 @@ final_ga_table as (
         crm_revenue_ltv.revenue,
         crm_revenue_ltv.margin,
         crm_revenue_ltv.ltv,
-        crm_revenue_ltv.ltv_margin,
+		crm_revenue_ltv.ltv_margin,
         crm_revenue_ltv.all_orders
       FROM
         crm_revenue_ltv
@@ -456,6 +502,11 @@ final_ga_table as (
         crm_revenue_ltv.user_type_crm,
         final_ga_table.source,
         final_ga_table.medium,
+        final_ga_table.campaign,
+        final_ga_table.campaign_id,
+        final_ga_table.ad_group,
+        final_ga_table.ad_group_id,
+        final_ga_table.ad_id,
         final_ga_table.first_source,
         final_ga_table.first_medium,
         final_ga_table.device,
@@ -470,7 +521,7 @@ final_ga_table as (
         crm_revenue_ltv.revenue,
         crm_revenue_ltv.margin,
         crm_revenue_ltv.ltv,
-        crm_revenue_ltv.ltv_margin,
+		crm_revenue_ltv.ltv_margin,
         crm_revenue_ltv.all_orders
       FROM
         crm_revenue_ltv
@@ -504,7 +555,7 @@ crm_revenue_ga as (
         AS session_start,
         order_date,
         CASE
-          WHEN user_pseudo_id IS NULL and client_id IS NOT NULL THEN client_id
+          WHEN user_pseudo_id IS NULL and  client_id IS NOT NULL THEN client_id
           WHEN user_pseudo_id IS NULL and client_id IS NULL THEN user_id
         ELSE
         user_pseudo_id
@@ -518,6 +569,11 @@ crm_revenue_ga as (
         AS user_type,
         source,
         medium,
+        campaign,
+        campaign_id,
+       ad_group,
+        ad_group_id,
+        ad_id,
         first_source,
         first_medium,
         device,
@@ -534,7 +590,7 @@ crm_revenue_ga as (
         revenue,
         margin,
         ltv,
-        ltv_margin,
+		ltv_margin,
         all_orders
       FROM
         crm_revenue_ga),
@@ -563,6 +619,11 @@ crm_revenue_ga as (
         user_type,
         source,
         medium,
+        campaign,
+        campaign_id,
+       ad_group,
+        ad_group_id,
+        ad_id,
         first_source,
         first_medium,
         device,
@@ -581,7 +642,7 @@ crm_revenue_ga as (
         revenue,
         margin,
         ltv,
-        ltv_margin,
+		ltv_margin,
         all_orders
       FROM
         crm_revenue_ga_is_first
@@ -598,6 +659,11 @@ crm_revenue_ga as (
         user_type,
         source,
         medium,
+        campaign,
+        campaign_id,
+       ad_group,
+        ad_group_id,
+        ad_id,
         first_source,
         first_medium,
         device,
@@ -616,7 +682,7 @@ crm_revenue_ga as (
         0 AS revenue,
         0 AS margin,
         0 AS ltv,
-        0 as ltv_margin,
+        0 AS ltv_margin,
         0 as all_orders
       FROM
         final_ga_table
@@ -632,6 +698,11 @@ crm_revenue_ga as (
         user_type,
         source,
         medium,
+        campaign,
+        campaign_id,
+       ad_group,
+        ad_group_id,
+        ad_id,
         first_source,
         first_medium,
         device,
@@ -650,7 +721,7 @@ crm_revenue_ga as (
         revenue,
         margin,
         ltv,
-        ltv_margin,
+		ltv_margin,
         all_orders
       FROM
         fix_session_id),
@@ -669,6 +740,11 @@ crm_revenue_ga as (
         user_type,
         source,
         medium,
+        campaign,
+        campaign_id,
+       ad_group,
+        ad_group_id,
+        ad_id,
         first_source,
         first_medium,
         device,
@@ -699,7 +775,7 @@ crm_revenue_ga as (
         revenue,
         margin,
         ltv,
-        ltv_margin,
+		ltv_margin,
         all_orders
         FROM all_sessions_transactions
 
@@ -718,6 +794,11 @@ empty_pam_agg as (
         user_type,
         source,
         medium,
+        campaign,
+        campaign_id,
+       ad_group,
+        ad_group_id,
+        ad_id,
         first_source,
         first_medium,
         device,
@@ -736,7 +817,7 @@ empty_pam_agg as (
         sum(revenue) as revenue,
         sum(margin) as margin,
         sum(ltv) as ltv,
-        sum(ltv_margin) as ltv_margin,
+		sum(ltv_margin) as ltv_margin,
         sum(all_orders) as all_orders
         FROM empty_pam
         GROUP BY
@@ -748,6 +829,11 @@ empty_pam_agg as (
         user_type,
         source,
         medium,
+        campaign,
+        campaign_id,
+       ad_group,
+        ad_group_id,
+        ad_id,
         first_source,
         first_medium,
         device,
@@ -766,7 +852,7 @@ products_table AS(
     products,
     delivery
   FROM
-    `turbo-ukr.raw_data.raw_deals`),
+    {{ source("raw_db", "raw_deals") }}),
 
 --join products to crm data
 crm_revenue_agg AS (
@@ -779,6 +865,11 @@ crm_revenue_agg AS (
         empty_pam_agg.user_type,
         empty_pam_agg.source,
         empty_pam_agg.medium,
+        empty_pam_agg.campaign,
+        empty_pam_agg.campaign_id,
+       empty_pam_agg.ad_group,
+        empty_pam_agg.ad_group_id,
+        empty_pam_agg.ad_id,
         empty_pam_agg.first_source,
         empty_pam_agg.first_medium,
         empty_pam_agg.device,
@@ -797,7 +888,7 @@ crm_revenue_agg AS (
         empty_pam_agg.revenue,
         empty_pam_agg.margin,
         empty_pam_agg.ltv,
-        empty_pam_agg.ltv_margin,
+		empty_pam_agg.ltv_margin,
         empty_pam_agg.all_orders,
         products_table.products,
         products_table.delivery
@@ -829,6 +920,11 @@ crm_revenue_agg AS (
         medium
       END
         AS medium,
+        campaign,
+        campaign_id,
+       ad_group,
+        ad_group_id,
+        ad_id,
         first_source,
         first_medium,
         device,
@@ -849,7 +945,7 @@ crm_revenue_agg AS (
         revenue,
         margin,
         ltv,
-        ltv_margin,
+		ltv_margin,
         all_orders
       FROM
         crm_revenue_agg),
@@ -918,6 +1014,11 @@ signup_to_order as (
         user_type,
         source,
         medium,
+        campaign,
+        campaign_id,
+       ad_group,
+        ad_group_id,
+        ad_id,
         first_source,
         first_medium,
         device,
@@ -937,7 +1038,7 @@ signup_to_order as (
         sign_up,
         addtocart,
         ltv,
-        ltv_margin,
+		ltv_margin,
         all_orders,
         transactions,
         revenue,
@@ -1000,6 +1101,11 @@ signup_to_order as (
         user_type,
         source,
         medium,
+        campaign,
+        campaign_id,
+       ad_group,
+        ad_group_id,
+        ad_id,
         device,
         device_platform,
         platform,
@@ -1016,12 +1122,12 @@ signup_to_order as (
         views,
         addtocart,
         ltv,
-        ltv_margin,
         all_orders,
         sign_up,
         transactions,
         revenue,
         margin,
+		ltv_margin,
         last_non_direct_sign_up,
         last_non_direct_transactions,
         last_non_direct_revenue,

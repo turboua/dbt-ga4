@@ -19,8 +19,8 @@ WITH
                 ')'
             ), '%2528', '('), '%255C', '\\'), '%2529', ')'), '%7B', '{'), '%7D', '}') as ad_group,
     ad_id,
-    SUM(users) AS users,
-    SUM(sessions) AS sessions,
+    count(user_pseudo_id) AS users,
+    count(session_id) AS sessions,
     SUM(views) AS views,
     SUM(last_non_direct_transactions) AS transactions,
     SUM(last_non_direct_revenue) AS revenue,
@@ -29,7 +29,7 @@ WITH
     null as cost,
     
   FROM
-    {{ ref("stg_lastnondirect") }}
+    {{ ref("ga4_sessions") }}
   GROUP BY
     date,
     source,
