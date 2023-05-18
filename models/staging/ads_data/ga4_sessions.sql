@@ -78,12 +78,12 @@ WITH
   END
     AS addtocart
   FROM
-    `turbo-ukr.analytics_286195171.events_*`
-  WHERE
-    event_name = 'page_view'
-    OR event_name = 'screen_view'
-    OR event_name = 'sign_up'
-    OR event_name = 'add_to_cart' ),
+    `turbo-ukr.analytics_286195171.events_*`),
+--   WHERE
+--     event_name = 'page_view'
+--     OR event_name = 'screen_view'
+--     OR event_name = 'sign_up'
+--     OR event_name = 'add_to_cart' 
 
 --if durring one session user had two or more sources, CTE takes first one
   basic_sessions_sources AS (
@@ -106,6 +106,7 @@ WITH
     SUM(addtocart) AS addtocart,
     session_id,
     user_pseudo_id,
+    user_id,
     CASE
       WHEN session_number = 1 THEN 'new'
     ELSE
@@ -142,6 +143,7 @@ WITH
     date,
     session_id,
     user_pseudo_id,
+    user_id,
     user_type,
     first_source,
     first_medium,
@@ -160,6 +162,7 @@ WITH
     addtocart,
     session_id,
     user_pseudo_id,
+    user_id,
     user_type,
     first_source,
     first_medium,
@@ -256,13 +259,14 @@ WITH
 --joins base table form GA with fixed gclid sources and mediums with tech table and table with first page location
 --if page location contains utms and source/medium is null, takes utms source/medium
 --adds campaign_id, ad_group, ad_group_id, ad_id from utms
-  final_ga_table AS (
+  ga_table AS (
   SELECT
     fix_duplicates.date,
     fix_duplicates.session_id,
     session_start_end.session_start,
     session_start_end.session_end,
     fix_duplicates.user_pseudo_id,
+    fix_duplicates.user_id,
     fix_duplicates.user_type,
     first_page_path.page_path,
     CASE
@@ -305,6 +309,7 @@ WITH
         session_start_end.session_start,
         session_start_end.session_end,
         fix_duplicates.user_pseudo_id,
+        fix_duplicates.user_id,
         fix_duplicates.user_type,
         first_page_path.page_path,
         source,
@@ -313,6 +318,28 @@ WITH
         fix_duplicates.first_medium,
         fix_duplicates.device,
         fix_duplicates.platform),
+
+final_ga_table as (
+  select date,
+    session_id,
+    session_start,
+    session_end,
+    user_pseudo_id,
+    CASE WHEN user_id is null then first_value(user_id ignore nulls) over (partition by user_pseudo_id order by session_start rows between unbounded preceding and unbounded following) ELSE user_id END as user_id,
+    user_type,
+    page_path,
+    source,
+    medium,
+    first_source,
+    first_medium,
+    device,
+    device_platform,
+    platform,
+    views,
+  sign_up,
+  addtocart FROM ga_table
+
+),
 
 --takes transactions data from the base_deals table
 -- if client_id is false fill null
@@ -367,13 +394,14 @@ WITH
       SELECT
         *,
         SUM(revenue) OVER (PARTITION BY user_id ORDER BY UNIX_MICROS(order_date)) AS ltv,
+        SUM(margin) OVER (PARTITION BY user_id ORDER BY UNIX_MICROS(order_date)) AS ltv_margin,
          COUNT(transaction_id) OVER (PARTITION BY user_id ORDER BY UNIX_MICROS(order_date)) AS all_orders,
        FROM
         crm_revenue ),
 
 --joins final_ga_table with crm_revenue 
 --joins with transaction on client_id and if time of the transaction is more then session start time and less then session end time    
-      crm_revenue_ga AS (
+      crm_revenue_ga_user_id AS (
       SELECT
         crm_revenue_ltv.date,
         crm_revenue_ltv.date_time,
@@ -401,6 +429,48 @@ WITH
         crm_revenue_ltv.revenue,
         crm_revenue_ltv.margin,
         crm_revenue_ltv.ltv,
+        crm_revenue_ltv.ltv_margin,
+        crm_revenue_ltv.all_orders
+      FROM
+        crm_revenue_ltv
+      LEFT JOIN
+        final_ga_table
+      ON
+        crm_revenue_ltv.user_id = final_ga_table.user_id
+        AND crm_revenue_ltv.date = final_ga_table.date
+        AND crm_revenue_ltv.order_date >= final_ga_table.session_start
+        AND crm_revenue_ltv.order_date <= final_ga_table.session_end
+    WHERE crm_revenue_ltv.client_id is NULL),
+
+    crm_revenue_ga_client_id AS (
+      SELECT
+        crm_revenue_ltv.date,
+        crm_revenue_ltv.date_time,
+        crm_revenue_ltv.order_date,
+        final_ga_table.session_id,
+        final_ga_table.session_start,
+        final_ga_table.user_pseudo_id,
+        crm_revenue_ltv.user_id,
+        crm_revenue_ltv.client_id,
+        final_ga_table.user_type,
+        crm_revenue_ltv.user_type_crm,
+        final_ga_table.source,
+        final_ga_table.medium,
+        final_ga_table.first_source,
+        final_ga_table.first_medium,
+        final_ga_table.device,
+        final_ga_table.platform,
+        crm_revenue_ltv.payment_method,
+        UPPER(crm_revenue_ltv.platform) AS platform_crm,
+        crm_revenue_ltv.gender,
+        crm_revenue_ltv.birth_date,
+        crm_revenue_ltv.transaction_id,
+        crm_revenue_ltv.status,
+        crm_revenue_ltv.transactions,
+        crm_revenue_ltv.revenue,
+        crm_revenue_ltv.margin,
+        crm_revenue_ltv.ltv,
+        crm_revenue_ltv.ltv_margin,
         crm_revenue_ltv.all_orders
       FROM
         crm_revenue_ltv
@@ -410,7 +480,15 @@ WITH
         crm_revenue_ltv.client_id = final_ga_table.user_pseudo_id
         AND crm_revenue_ltv.date = final_ga_table.date
         AND crm_revenue_ltv.order_date >= final_ga_table.session_start
-        AND crm_revenue_ltv.order_date <= final_ga_table.session_end),
+        AND crm_revenue_ltv.order_date <= final_ga_table.session_end
+    WHERE crm_revenue_ltv.client_id is not NULL),
+
+crm_revenue_ga as (
+    SELECT * FROM crm_revenue_ga_user_id 
+    UNION ALL
+    SELECT * FROM crm_revenue_ga_client_id
+
+),
 
 --if user_pseudo_id in the previous table is null, takes user_id form the crm    
       crm_revenue_ga_fix_uid AS (
@@ -426,7 +504,7 @@ WITH
         AS session_start,
         order_date,
         CASE
-          WHEN user_pseudo_id IS NULL and  client_id IS NOT NULL THEN client_id
+          WHEN user_pseudo_id IS NULL and client_id IS NOT NULL THEN client_id
           WHEN user_pseudo_id IS NULL and client_id IS NULL THEN user_id
         ELSE
         user_pseudo_id
@@ -456,6 +534,7 @@ WITH
         revenue,
         margin,
         ltv,
+        ltv_margin,
         all_orders
       FROM
         crm_revenue_ga),
@@ -502,6 +581,7 @@ WITH
         revenue,
         margin,
         ltv,
+        ltv_margin,
         all_orders
       FROM
         crm_revenue_ga_is_first
@@ -536,6 +616,7 @@ WITH
         0 AS revenue,
         0 AS margin,
         0 AS ltv,
+        0 as ltv_margin,
         0 as all_orders
       FROM
         final_ga_table
@@ -569,6 +650,7 @@ WITH
         revenue,
         margin,
         ltv,
+        ltv_margin,
         all_orders
       FROM
         fix_session_id),
@@ -617,6 +699,7 @@ WITH
         revenue,
         margin,
         ltv,
+        ltv_margin,
         all_orders
         FROM all_sessions_transactions
 
@@ -653,6 +736,7 @@ empty_pam_agg as (
         sum(revenue) as revenue,
         sum(margin) as margin,
         sum(ltv) as ltv,
+        sum(ltv_margin) as ltv_margin,
         sum(all_orders) as all_orders
         FROM empty_pam
         GROUP BY
@@ -713,6 +797,7 @@ crm_revenue_agg AS (
         empty_pam_agg.revenue,
         empty_pam_agg.margin,
         empty_pam_agg.ltv,
+        empty_pam_agg.ltv_margin,
         empty_pam_agg.all_orders,
         products_table.products,
         products_table.delivery
@@ -764,6 +849,7 @@ crm_revenue_agg AS (
         revenue,
         margin,
         ltv,
+        ltv_margin,
         all_orders
       FROM
         crm_revenue_agg),
@@ -851,6 +937,7 @@ signup_to_order as (
         sign_up,
         addtocart,
         ltv,
+        ltv_margin,
         all_orders,
         transactions,
         revenue,
@@ -929,6 +1016,7 @@ signup_to_order as (
         views,
         addtocart,
         ltv,
+        ltv_margin,
         all_orders,
         sign_up,
         transactions,
