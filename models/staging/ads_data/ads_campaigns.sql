@@ -6,24 +6,24 @@ WITH
   base_ga_table AS (
   SELECT
     date,
-    source,
-    medium,
+    last_non_direct_source as source,
+    last_non_direct_medium as medium,
     replace(replace(replace(replace(replace(replace(
-                replace(replace(replace(campaign, '+', ' '), '%2F', '/'), '%28', '('),
+                replace(replace(replace(last_non_direct_campaign, '+', ' '), '%2F', '/'), '%28', '('),
                 '%29',
                 ')'
             ), '%2528', '('), '%255C', '\\'), '%2529', ')'), '%7B', '{'), '%7D', '}') as campaign,
     replace(replace(replace(replace(replace(replace(
-                replace(replace(replace(ad_group, '+', ' '), '%2F', '/'), '%28', '('),
+                replace(replace(replace(last_non_direct_ad_group, '+', ' '), '%2F', '/'), '%28', '('),
                 '%29',
                 ')'
             ), '%2528', '('), '%255C', '\\'), '%2529', ')'), '%7B', '{'), '%7D', '}') as ad_group,
-    ad_id,
+    last_non_direct_ad_id as ad_id,
     count(user_pseudo_id) AS users,
     count(session_id) AS sessions,
     SUM(views) AS views,
-    SUM(last_non_direct_transactions) AS transactions,
-    SUM(last_non_direct_revenue) AS revenue,
+    SUM(transactions) AS transactions,
+    SUM(revenue) AS revenue,
     null as impressions,
     null as clicks,
     null as cost,
@@ -32,11 +32,11 @@ WITH
     {{ ref("ga4_sessions") }}
   GROUP BY
     date,
-    source,
-    medium,
-    campaign,
-    ad_group,
-    ad_id ),
+    last_non_direct_source,
+    last_non_direct_medium,
+    last_non_direct_campaign,
+    last_non_direct_ad_group,
+    last_non_direct_ad_id ),
 
  ---aggregates data from the ads table on the campaign level   
   campaign_level AS (
