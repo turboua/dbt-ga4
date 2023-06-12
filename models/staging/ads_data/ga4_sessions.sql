@@ -872,23 +872,24 @@ signup_to_order as (
         revenue,
         margin,
         CASE
-        WHEN CONCAT(source, '/', medium) = '(direct)/(none)' and (transactions > 0 or sign_up > 0 or revenue > 0 or margin > 0) THEN last_value(NULLIF(source, '(direct)') IGNORE NULLS) over (partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row)
+        WHEN CONCAT(source, '/', medium) = '(direct)/(none)' and (transactions > 0 or sign_up > 0 or revenue > 0 or margin > 0) and date_diff(session_start, last_value(last_non_direct_time ignore nulls) over(partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row), day) < 90
+        THEN last_value(NULLIF(source, '(direct)') IGNORE NULLS) over (partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row)
         ELSE source END
         AS last_non_direct_source,
 CASE
-        WHEN CONCAT(source, '/', medium) = '(direct)/(none)' and (transactions > 0 or sign_up > 0 or revenue > 0 or margin > 0) THEN last_value(NULLIF(medium, '(none)') IGNORE NULLS) over (partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row)
+        WHEN CONCAT(source, '/', medium) = '(direct)/(none)' and (transactions > 0 or sign_up > 0 or revenue > 0 or margin > 0) and date_diff(session_start, last_value(last_non_direct_time ignore nulls) over(partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row), day) < 90 THEN last_value(NULLIF(medium, '(none)') IGNORE NULLS) over (partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row)
         ELSE medium END
         AS last_non_direct_medium,
 CASE
-        WHEN CONCAT(source, '/', medium) = '(direct)/(none)' and (transactions > 0 or sign_up > 0 or revenue > 0 or margin > 0) THEN last_value(NULLIF(campaign, '(none)') IGNORE NULLS) over (partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row)
+        WHEN CONCAT(source, '/', medium) = '(direct)/(none)' and (transactions > 0 or sign_up > 0 or revenue > 0 or margin > 0) and date_diff(session_start, last_value(last_non_direct_time ignore nulls) over(partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row), day) < 90 THEN last_value(NULLIF(campaign, '(none)') IGNORE NULLS) over (partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row)
         ELSE campaign END
         AS last_non_direct_campaign,
         CASE
-        WHEN CONCAT(source, '/', medium) = '(direct)/(none)' and (transactions > 0 or sign_up > 0 or revenue > 0 or margin > 0) THEN last_value(NULLIF(ad_group, '(none)') IGNORE NULLS) over (partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row)
+        WHEN CONCAT(source, '/', medium) = '(direct)/(none)' and (transactions > 0 or sign_up > 0 or revenue > 0 or margin > 0) and date_diff(session_start, last_value(last_non_direct_time ignore nulls) over(partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row), day) < 90 THEN last_value(NULLIF(ad_group, '(none)') IGNORE NULLS) over (partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row)
         ELSE ad_group END
         AS last_non_direct_ad_group,
         CASE
-         WHEN CONCAT(source, '/', medium) = '(direct)/(none)' and (transactions > 0 or sign_up > 0 or revenue > 0 or margin > 0) THEN last_value(NULLIF(ad_id, '(none)') IGNORE NULLS) over (partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row)
+         WHEN CONCAT(source, '/', medium) = '(direct)/(none)' and (transactions > 0 or sign_up > 0 or revenue > 0 or margin > 0) and date_diff(session_start, last_value(last_non_direct_time ignore nulls) over(partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row), day) < 90 THEN last_value(NULLIF(ad_id, '(none)') IGNORE NULLS) over (partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row)
         ELSE ad_id END
         AS last_non_direct_ad_id
       FROM
