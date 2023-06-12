@@ -230,7 +230,7 @@ WITH
     WHERE
       KEY = 'page_location') AS page_path,
   FROM
-    {{ source('ga4', 'events') }} ),
+    `turbo-ukr.analytics_286195171.events_*` ),
 
   all_page_path_window AS (
   SELECT
@@ -410,8 +410,13 @@ final_ga_table as (
     session_id,
     session_start,
     session_end,
-    user_pseudo_id,
-    CASE WHEN user_id is null then first_value(user_id ignore nulls) over (partition by user_pseudo_id order by session_start rows between unbounded preceding and unbounded following) ELSE user_id END as user_id,
+    CASE
+          WHEN user_id IS NOT NULL then user_id
+          -- WHEN user_pseudo_id IS NULL and user_id is NULL and client_id IS NOT NULL THEN client_id
+          -- WHEN user_pseudo_id IS NOT NULL and user_id is NULL and client_id IS NULL THEN user_id
+        ELSE
+        user_pseudo_id
+      END as user_pseudo_id,
     user_type,
     page_path,
     source,
@@ -442,18 +447,6 @@ crm_revenue AS (
         order_date,
         UNIX_MICROS(order_date) AS date_time,
         user_id,
-        CASE
-          WHEN UNIX_MICROS(order_date) = FIRST_VALUE(UNIX_MICROS(order_date)) OVER (PARTITION BY user_id ORDER BY UNIX_MICROS(order_date)) THEN 'new'
-        ELSE
-        'returning'
-      END
-        AS user_type_crm,
-        CASE
-          WHEN client_id = 'false' THEN NULL
-        ELSE
-        client_id
-      END
-        AS client_id,
         platform,
         payment_method,
         gender,
@@ -464,7 +457,7 @@ crm_revenue AS (
         SUM(value) AS revenue,
         SUM(margin) AS margin
       FROM
-        {{ ref("base_deals") }}
+         {{ ref("base_deals") }} --
       -- WHERE
       --   DATE(order_date) = '2023-05-01'
       GROUP BY
@@ -501,9 +494,6 @@ crm_revenue AS (
         final_ga_table.session_start,
         final_ga_table.user_pseudo_id,
         crm_revenue_ltv.user_id,
-        crm_revenue_ltv.client_id,
-        final_ga_table.user_type,
-        crm_revenue_ltv.user_type_crm,
         final_ga_table.source,
         final_ga_table.medium,
         final_ga_table.campaign,
@@ -548,20 +538,13 @@ crm_revenue_ga_fix_uid AS (
       END
         AS session_start,
         order_date,
-        CASE
+       CASE
           WHEN user_id IS NOT NULL then user_id
-          WHEN user_pseudo_id IS NULL and user_id is NULL and client_id IS NOT NULL THEN client_id
-          WHEN user_pseudo_id IS NOT NULL and user_id is NULL and client_id IS NULL THEN user_id
+          -- WHEN user_pseudo_id IS NULL and user_id is NULL and client_id IS NOT NULL THEN client_id
+          -- WHEN user_pseudo_id IS NOT NULL and user_id is NULL and client_id IS NULL THEN user_id
         ELSE
         user_pseudo_id
-      END
-        AS user_pseudo_id,
-        CASE
-          WHEN user_type IS NULL THEN user_type_crm
-        ELSE
-        user_type
-      END
-        AS user_type,
+      END as user_pseudo_id,
         source,
         medium,
         campaign,
@@ -614,7 +597,6 @@ crm_revenue_ga_fix_uid AS (
         session_start,
         order_date,
         user_pseudo_id,
-        user_type,
         source,
         medium,
         campaign,
@@ -656,7 +638,6 @@ crm_revenue_ga_fix_uid AS (
         session_start,
         CAST(NULL AS TIMESTAMP) AS order_date,
         user_pseudo_id,
-        user_type,
         source,
         medium,
         campaign,
@@ -694,10 +675,10 @@ crm_revenue_ga_fix_uid AS (
       SELECT
         date,
         session_id,
-        session_start,
+        CASE WHEN session_start is null then order_date
+        ELSE session_start END as session_start,
         order_date,
         user_pseudo_id,
-        user_type,
         source,
         medium,
         campaign,
@@ -745,7 +726,6 @@ crm_revenue_agg AS (
         all_sessions_transactions.session_start,
         all_sessions_transactions.order_date,
         all_sessions_transactions.user_pseudo_id,
-        all_sessions_transactions.user_type,
         all_sessions_transactions.source,
         all_sessions_transactions.medium,
         all_sessions_transactions.campaign,
@@ -790,15 +770,22 @@ crm_revenue_agg AS (
         session_start,
         order_date,
         user_pseudo_id,
-        user_type,
+        CASE
+          WHEN UNIX_MICROS(session_start) = FIRST_VALUE(UNIX_MICROS(session_start)) OVER (PARTITION BY user_pseudo_id ORDER BY UNIX_MICROS(session_start)) THEN 'new'
+        ELSE
+        'returning'
+      END
+        AS user_type,
         CASE
           WHEN source IS NULL THEN '(direct)'
+          WHEN source like '%ipay%' THEN '(direct)'
         ELSE
         source
       END
         AS source,
         CASE
           WHEN medium IS NULL THEN '(none)'
+          WHEN source like '%ipay%' THEN '(none)'
         ELSE
         medium
       END
@@ -844,50 +831,8 @@ signup_to_order as (
      FROM all_views_transactions_agg
 ),
 
---add last session_start time where source is not direct 
-      last_non_direct_time AS(
-      SELECT
-        *,
-        MAX(CASE
-            WHEN CONCAT(source, '/', medium) != '(direct)/(none)' THEN session_start
-        END
-          ) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) AS max_non_direct_time
-      FROM
-        signup_to_order ),
-
---in case wgen session start time is bigger then last non direct time returns sum of conversions        
-      last_direct_revenue AS (
-      SELECT
-        *,
-        SUM(CASE
-            WHEN session_start < max_non_direct_time THEN NULL
-          ELSE
-          sign_up
-        END
-          ) OVER (PARTITION BY user_pseudo_id, max_non_direct_time ORDER BY session_start ROWS UNBOUNDED PRECEDING) AS max_direct_sign_up,
-        SUM(CASE
-            WHEN session_start < max_non_direct_time THEN NULL
-          ELSE
-          transactions
-        END
-          ) OVER (PARTITION BY user_pseudo_id, max_non_direct_time ORDER BY session_start ROWS UNBOUNDED PRECEDING) AS max_direct_transactions,
-        SUM(CASE
-            WHEN session_start < max_non_direct_time THEN NULL
-          ELSE
-          revenue
-        END
-          ) OVER (PARTITION BY user_pseudo_id, max_non_direct_time ORDER BY session_start ROWS UNBOUNDED PRECEDING) AS max_direct_revenue,
-        SUM(CASE
-            WHEN session_start < max_non_direct_time THEN NULL
-          ELSE
-          margin
-        END
-          ) OVER (PARTITION BY user_pseudo_id, max_non_direct_time ORDER BY session_start ROWS UNBOUNDED PRECEDING) AS max_direct_margin
-      FROM
-        last_non_direct_time ),
-
 --returns last non direct attribution
-      last_non_direct_agg AS (
+      last_non_direct AS (
       SELECT
         date,
         session_id,
@@ -927,54 +872,31 @@ signup_to_order as (
         revenue,
         margin,
         CASE
-          WHEN CONCAT(source, '/', medium) != '(direct)/(none)' AND LEAD(CONCAT(source, '/', medium)) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) != '(direct)/(none)' THEN sign_up
-          WHEN CONCAT(source, '/', medium) != '(direct)/(none)'
-        AND LEAD(CONCAT(source, '/', medium)) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) = '(direct)/(none)' THEN LAST_VALUE(max_direct_sign_up) OVER (PARTITION BY user_pseudo_id, max_non_direct_time ORDER BY session_start ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
-          WHEN CONCAT(source, '/', medium) = '(direct)/(none)' AND FIRST_VALUE(NULLIF(CONCAT(source, '/', medium), '(direct)/(none)') IGNORE NULLS) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) = '(direct)/(none)' THEN sign_up
-          WHEN CONCAT(source, '/', medium) = '(direct)/(none)'
-        AND FIRST_VALUE(NULLIF(CONCAT(source, '/', medium), '(direct)/(none)') IGNORE NULLS) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) != '(direct)/(none)' THEN 0
-        ELSE
-        sign_up
-      END
-        AS last_non_direct_sign_up,
+        WHEN CONCAT(source, '/', medium) = '(direct)/(none)' and (transactions > 0 or sign_up > 0 or revenue > 0 or margin > 0) THEN last_value(NULLIF(source, '(direct)') IGNORE NULLS) over (partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row)
+        ELSE source END
+        AS last_non_direct_source,
+CASE
+        WHEN CONCAT(source, '/', medium) = '(direct)/(none)' and (transactions > 0 or sign_up > 0 or revenue > 0 or margin > 0) THEN last_value(NULLIF(medium, '(none)') IGNORE NULLS) over (partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row)
+        ELSE medium END
+        AS last_non_direct_medium,
+CASE
+        WHEN CONCAT(source, '/', medium) = '(direct)/(none)' and (transactions > 0 or sign_up > 0 or revenue > 0 or margin > 0) THEN last_value(NULLIF(campaign, '(none)') IGNORE NULLS) over (partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row)
+        ELSE campaign END
+        AS last_non_direct_campaign,
         CASE
-          WHEN CONCAT(source, '/', medium) != '(direct)/(none)' AND LEAD(CONCAT(source, '/', medium)) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) != '(direct)/(none)' THEN transactions
-          WHEN CONCAT(source, '/', medium) != '(direct)/(none)'
-        AND LEAD(CONCAT(source, '/', medium)) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) = '(direct)/(none)' THEN LAST_VALUE(max_direct_transactions) OVER (PARTITION BY user_pseudo_id, max_non_direct_time ORDER BY session_start ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
-          WHEN CONCAT(source, '/', medium) = '(direct)/(none)' AND FIRST_VALUE(NULLIF(CONCAT(source, '/', medium), '(direct)/(none)') IGNORE NULLS) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) = '(direct)/(none)' THEN transactions
-          WHEN CONCAT(source, '/', medium) = '(direct)/(none)'
-        AND FIRST_VALUE(NULLIF(CONCAT(source, '/', medium), '(direct)/(none)') IGNORE NULLS) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) != '(direct)/(none)' THEN 0
-        ELSE
-        transactions
-      END
-        AS last_non_direct_transactions,
+        WHEN CONCAT(source, '/', medium) = '(direct)/(none)' and (transactions > 0 or sign_up > 0 or revenue > 0 or margin > 0) THEN last_value(NULLIF(ad_group, '(none)') IGNORE NULLS) over (partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row)
+        ELSE ad_group END
+        AS last_non_direct_ad_group,
         CASE
-          WHEN CONCAT(source, '/', medium) != '(direct)/(none)' AND LEAD(CONCAT(source, '/', medium)) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) != '(direct)/(none)' THEN revenue
-          WHEN CONCAT(source, '/', medium) != '(direct)/(none)'
-        AND LEAD(CONCAT(source, '/', medium)) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) = '(direct)/(none)' THEN LAST_VALUE(max_direct_revenue) OVER (PARTITION BY user_pseudo_id, max_non_direct_time ORDER BY session_start ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
-          WHEN CONCAT(source, '/', medium) = '(direct)/(none)'
-        AND FIRST_VALUE(NULLIF(CONCAT(source, '/', medium), '(direct)/(none)') IGNORE NULLS) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) != '(direct)/(none)' THEN 0
-        ELSE
-        revenue
-      END
-        AS last_non_direct_revenue,
-        CASE
-          WHEN CONCAT(source, '/', medium) != '(direct)/(none)' AND LEAD(CONCAT(source, '/', medium)) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) != '(direct)/(none)' THEN margin
-          WHEN CONCAT(source, '/', medium) != '(direct)/(none)'
-        AND LEAD(CONCAT(source, '/', medium)) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) = '(direct)/(none)' THEN LAST_VALUE(max_direct_margin) OVER (PARTITION BY user_pseudo_id, max_non_direct_time ORDER BY session_start ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
-          WHEN CONCAT(source, '/', medium) = '(direct)/(none)' AND FIRST_VALUE(NULLIF(CONCAT(source, '/', medium), '(direct)/(none)') IGNORE NULLS) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) = '(direct)/(none)' THEN margin
-          WHEN CONCAT(source, '/', medium) = '(direct)/(none)'
-        AND FIRST_VALUE(NULLIF(CONCAT(source, '/', medium), '(direct)/(none)') IGNORE NULLS) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) != '(direct)/(none)' THEN 0
-        ELSE
-        margin
-      END
-        AS last_non_direct_margin,
+         WHEN CONCAT(source, '/', medium) = '(direct)/(none)' and (transactions > 0 or sign_up > 0 or revenue > 0 or margin > 0) THEN last_value(NULLIF(ad_id, '(none)') IGNORE NULLS) over (partition by user_pseudo_id ORDER BY session_start ROWS between unbounded preceding and current row)
+        ELSE ad_id END
+        AS last_non_direct_ad_id
       FROM
-        last_direct_revenue),
+        signup_to_order),
 
 --aggregates all to simple table
 --returns first session time
-      last_non_direct AS (
+      final_table AS (
       SELECT
         date,
         session_id,
@@ -1011,50 +933,24 @@ signup_to_order as (
         revenue,
         margin,
 		ltv_margin,
-        last_non_direct_sign_up,
-        last_non_direct_transactions,
-        last_non_direct_revenue,
-        last_non_direct_margin
-      FROM
-        last_non_direct_agg),
-      firts_session_time AS (
-      SELECT
-        *,
-        FIRST_VALUE(session_start) OVER (PARTITION BY user_pseudo_id ORDER BY session_start) AS first_session_time
-      FROM
-        last_non_direct ),
+    CASE WHEN last_non_direct_source is null then '(direct)' 
+        ELSE last_non_direct_source END as 
+        last_non_direct_source,
+        CASE WHEN last_non_direct_medium is null then '(none)' 
+        ELSE last_non_direct_medium END as last_non_direct_medium,
+        last_non_direct_campaign,
+        last_non_direct_ad_group,
+        last_non_direct_ad_id,
+        CASE WHEN first_source is null then '(direct)'
+         ELSE first_source END as first_source,
+        CASE WHEN first_medium is null then '(none)'
+         ELSE first_medium END as first_medium
+        from
+        last_non_direct)
+      
 
---returns first click attribution
-      final_table AS (
-      SELECT
-        *,
-        CASE
-          WHEN session_start = first_session_time THEN SUM(sign_up) OVER (PARTITION BY user_pseudo_id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
-        ELSE
-        0
-      END
-        AS first_sign_up,
-        CASE
-          WHEN session_start = first_session_time THEN SUM(transactions) OVER (PARTITION BY user_pseudo_id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
-        ELSE
-        0
-      END
-        AS first_transactions,
-        CASE
-          WHEN session_start = first_session_time THEN SUM(revenue) OVER (PARTITION BY user_pseudo_id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
-        ELSE
-        0
-      END
-        AS first_revenue,
-        CASE
-          WHEN session_start = first_session_time THEN SUM(margin) OVER (PARTITION BY user_pseudo_id ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
-        ELSE
-        0
-      END
-        AS first_margin,
-      FROM
-        firts_session_time )
 --final query
    SELECT 
     * 
-   FROM final_table 
+   FROM final_table
+
