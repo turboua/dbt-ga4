@@ -827,7 +827,8 @@ signup_to_order as (
   WHEN sum(transactions) over (partition by user_pseudo_id order by session_start ROWS between unbounded preceding and current row) > 0 THEN 1
   ELSE 0 END as isSignup, 
   CASE WHEN sum(transactions) over (partition by user_pseudo_id order by session_start ROWS between unbounded preceding and current row) > 0 THEN 1
-  ELSE 0 END as isOrder
+  ELSE 0 END as isOrder,
+  CASE WHEN CONCAT(source, '/', medium) != '(direct)/(none)' THEN session_start else null END as last_non_direct_time
      FROM all_views_transactions_agg
 ),
 
