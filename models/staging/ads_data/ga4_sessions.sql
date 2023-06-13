@@ -790,11 +790,36 @@ crm_revenue_agg AS (
         medium
       END
         AS medium,
-        campaign,
-        campaign_id,
-       ad_group,
-        ad_group_id,
-        ad_id,
+        CASE
+          WHEN campaign IS NULL THEN '(none)'
+        ELSE
+        campaign
+      END
+        AS campaign,
+        CASE
+          WHEN campaign_id IS NULL THEN '(none)'
+        ELSE
+        campaign_id
+      END
+        AS campaign_id,
+       CASE
+          WHEN ad_group IS NULL THEN '(none)'
+        ELSE
+        ad_group
+      END
+        AS ad_group,
+        CASE
+          WHEN ad_group_id IS NULL THEN '(none)'
+        ELSE
+        ad_group_id
+      END
+        AS ad_group_id,
+        CASE
+          WHEN ad_id IS NULL THEN '(none)'
+        ELSE
+        ad_id
+      END
+        AS ad_id,
         first_source,
         first_medium,
         device,
