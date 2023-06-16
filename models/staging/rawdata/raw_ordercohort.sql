@@ -77,12 +77,5 @@ join
         group by user_id, 2
     ) b
     on o.user_id = b.user_id
-join
-    (
-        select min(date) as cohort_month, user_id, transaction_id
-        from {{ source("raw_db", "raw_deals") }}
-        group by user_id, 3
-    ) bc
-    on b.user_id = bc.user_id
 group by 1, 2
 order by 1, 2
