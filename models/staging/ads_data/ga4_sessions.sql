@@ -74,6 +74,12 @@ WITH
       UNNEST(event_params)
     WHERE
       KEY = 'page_location') LIKE '%gBraid%' AS has_gBraid,
+       (SELECT
+      value.string_value
+    FROM
+      UNNEST(event_params)
+    WHERE
+      KEY = 'page_location') LIKE '%fbclid%' AS has_fbclid,
     CASE
       WHEN event_name = 'page_view' OR event_name = 'screen_view' THEN 1
     ELSE
@@ -142,6 +148,8 @@ WITH
       AND first_session_source IS NULL)
     OR (has_gBraid IS TRUE
       AND first_session_source IS NULL) THEN 'google'
+    WHEN has_fbclid IS TRUE
+      AND first_session_source IS NULL THEN 'facebook'
     ELSE
     first_session_source
   END
@@ -153,7 +161,9 @@ WITH
     OR (has_wbraid IS TRUE
       AND first_session_medium IS NULL)
     OR (has_gBraid IS TRUE
-      AND first_session_source IS NULL) THEN 'cpc'
+      AND first_session_medium IS NULL) THEN 'cpc'
+    WHEN has_fbclid IS TRUE
+      AND first_session_medium IS NULL THEN 'cpc'
     ELSE
     first_session_medium
   END
@@ -165,7 +175,9 @@ WITH
     OR (has_wbraid IS TRUE
       AND first_session_campaign IS NULL)
     OR (has_gBraid IS TRUE
-      AND first_session_source IS NULL) THEN '(cpc)'
+      AND first_session_campaign IS NULL) THEN '(cpc)'
+      WHEN has_fbclid IS TRUE
+      AND first_session_campaign IS NULL THEN '(cpc)'
     ELSE
     first_session_campaign
   END
